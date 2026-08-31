@@ -1,0 +1,41 @@
+# Meeting Scribe configuration reference.
+#
+# The live config lives at:  %APPDATA%\MeetingScribe\config.toml
+# It is created automatically on first run (hardware-tuned). Edit it there, or
+# use File > Settings in the app. This file is only a documented example.
+
+[general]
+workspace = ""            # "" -> %USERPROFILE%\MeetingScribe  (logs, downloads, models, projects)
+language  = "auto"        # ISO code (e.g. "en") or "auto" to detect
+
+[transcription]
+model        = "medium"   # tiny | base | small | medium | large-v3 | distil-large-v3
+compute_type = "int8"     # int8 | int8_float16 | float16 | float32   (int8 = best on CPU)
+beam_size    = 1
+vad_filter   = true
+
+[alignment]
+enabled = true            # forced alignment for tight word timing (needed for the highlight view)
+bundle  = "WAV2VEC2_ASR_BASE_960H"   # any torchaudio.pipelines CTC bundle
+
+[diarization]
+backend      = "auto"     # auto (pyannote if a token is set, else single speaker) | pyannote | off
+hf_token     = ""         # Hugging Face token; accept the pyannote model conditions first
+min_speakers = 0          # 0 = let the model decide
+max_speakers = 0
+
+[llm]
+model                 = "Qwen/Qwen3-4B"   # Qwen/Qwen3-1.7B | 4B | 8B | 14B | 32B
+dtype                 = "int8"            # int8 (fastest on CPU) | bfloat16 | float32 | float16 | auto
+max_new_tokens        = 1536
+map_reduce_char_limit = 40000            # transcripts longer than this are summarised in slices
+enable_thinking       = false            # Qwen3 "thinking" mode; off for structured extraction
+
+[qc]
+llm_reviewer          = true   # run a Qwen3 reviewer pass over the draft minutes/action items
+min_avg_logprob       = -1.0   # Whisper segments below this are flagged low-confidence
+max_compression_ratio = 2.4
+max_no_speech_prob    = 0.6
+
+[export]
+default_formats = ["docx"]      # pre-ticked in the wizard: any of docx, odt, pdf

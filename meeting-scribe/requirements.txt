@@ -1,0 +1,17 @@
+# Lightweight application dependencies (fast install, no compilers needed).
+# The heavy ML stack (torch / faster-whisper / transformers / pyannote) lives in
+# requirements-ml.txt so the installer can stage and cache it separately.
+
+PySide6>=6.6,<6.9
+tomli>=2.0 ; python_version < "3.11"
+tomli-w>=1.0
+requests>=2.31
+yt-dlp>=2024.8.6
+av>=11.0                # PyAV: decodes any audio/video container without a system ffmpeg
+imageio-ffmpeg>=0.5.1   # bundles a static ffmpeg binary for yt-dlp post-processing
+psutil>=5.9             # RAM detection for hardware auto-tuning
+numpy>=1.26,<2.3
+python-docx>=1.1.0
+odfpy>=1.4.1
+reportlab>=4.1.0
+pypdf>=4.2.0

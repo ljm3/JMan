@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meeting-scribe"
+version = "1.0.0"
+description = "Self-contained local meeting transcription, diarization, minutes and action-item generation."
+requires-python = ">=3.10,<3.13"
+readme = "README.md"
+dependencies = [
+    # See requirements.txt / requirements-ml.txt - kept there so the installer can
+    # stage the lightweight and the heavy (torch/transformers) sets separately.
+]
+
+[project.scripts]
+meeting-scribe = "meeting_scribe.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "meeting_scribe",
+    "meeting_scribe.pipeline",
+    "meeting_scribe.llm",
+    "meeting_scribe.documents",
+    "meeting_scribe.gui",
+]
+
+[tool.setuptools.package-data]
+"meeting_scribe" = ["assets/*"]

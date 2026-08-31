@@ -1,0 +1,27 @@
+# Heavy machine-learning stack. On Windows the default PyPI torch wheels are
+# already CPU-only, so no special index URL is required for this CPU build.
+#
+# Install AFTER requirements.txt:
+#     uv pip install -r requirements-ml.txt
+# (the installer script does this for you)
+
+torch>=2.5,<2.8
+torchaudio>=2.5,<2.8
+
+# Transcription (CTranslate2 backend - fast on CPU with int8)
+faster-whisper>=1.1.0
+ctranslate2>=4.4,<4.6
+setuptools<81            # ctranslate2 imports pkg_resources, removed in setuptools 81
+
+# Word-level forced alignment uses torchaudio.pipelines (bundled, no token).
+
+# Speaker diarization (optional at runtime; needs a Hugging Face token +
+# accepted model conditions for pyannote/speaker-diarization-3.1).
+pyannote.audio>=3.3.2
+
+# Local LLM for minutes / synopsis / action items / QC reviewer pass.
+transformers>=4.51.0
+accelerate>=0.30.0
+sentencepiece>=0.2.0
+safetensors>=0.4.3
+huggingface-hub>=0.24.0
