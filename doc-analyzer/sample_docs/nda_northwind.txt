@@ -1,0 +1,23 @@
+MUTUAL NON-DISCLOSURE AGREEMENT (NDA-2026-007)
+
+This Agreement is entered into as of March 1, 2026 between ACME Supply Co
+("Disclosing Party") and Northwind Trading LLC ("Receiving Party").
+
+1. Purpose. The parties wish to explore a supply arrangement for warehouse
+   fittings and will disclose confidential information for that purpose.
+
+2. Confidential Information. Includes pricing, forecasts, drawings, and any
+   material marked confidential or that a reasonable person would treat as such.
+
+3. Obligations. The Receiving Party shall protect the information, limit access
+   to employees with a need to know, and not disclose it to third parties.
+
+4. Term. This Agreement remains in effect for two years. Either party may
+   terminate it on thirty days written notice; confidentiality obligations
+   survive termination for three years.
+
+5. Governing law. The laws of the State of Oregon govern this Agreement.
+
+Signed by authorized representatives of both parties.
+ACME Supply Co — J. Reyes, VP Operations
+Northwind Trading LLC — P. Osei, Director of Procurement

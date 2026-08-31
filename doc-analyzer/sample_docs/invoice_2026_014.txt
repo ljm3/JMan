@@ -1,0 +1,17 @@
+ACME SUPPLY CO — INVOICE INV-2026-014
+Date: 2026-03-04
+Bill To: Northwind Trading LLC, 400 Harbor Street, Portland
+
+Description                         Qty     Unit price     Amount
+Steel brackets, 12mm                 120        $4.50        $540.00
+Anchor bolts, box of 50               18       $22.00        $396.00
+Freight and handling                                          $75.00
+--------------------------------------------------------------------
+Subtotal                                                    $1,011.00
+Tax (8%)                                                       $80.88
+Total due                                                   $1,091.88
+
+Payment terms: net 30. Please pay the total due to ACME Supply Co by
+2026-04-03. Remit payment by ACH or check referencing INV-2026-014.
+We will ship the balance of the order once payment is received.
+Questions: billing@acmesupply.example — +1 503 555 0142.

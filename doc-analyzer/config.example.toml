@@ -1,0 +1,91 @@
+# Copy to  config.toml  (the installer does this automatically) and edit.
+# Every value can also be overridden by an environment variable, shown in [brackets].
+
+[analysis]
+# Files larger than this (megabytes) are catalogued but their body is not parsed.
+max_file_mb = 25                     # [DOCAN_MAX_FILE_MB]
+# Hard cap on how many documents one session will fully analyze.
+max_docs = 5000                      # [DOCAN_MAX_DOCS]
+# Cosine-similarity threshold for grouping "like" documents into a cluster.
+similarity_threshold = 0.18          # [DOCAN_SIMILARITY]
+# Try OCR on image files (needs pytesseract + the Tesseract binary).
+ocr_enabled = true                   # [DOCAN_OCR]
+# Recurse into subfolders of the chosen data location.
+recursive = true                     # [DOCAN_RECURSIVE]
+
+[llm]
+# Local model that reads your analysis objective, plans the analysis (which named
+# resources to track, how the naming scheme decomposes, which metrics to compute)
+# and writes the answers.  Needs torch + transformers; the bridge looks for them
+# in (1) [llm].python below, (2) this app's own .venv - install with
+# `setup.ps1 -LocalModel`, (3) a meeting-scribe checkout beside this app.
+# When none is available the run falls back to the deterministic keyword analysis.
+enabled = true                       # [DOCAN_LLM_ENABLED]
+# Explicit path to a python.exe that has torch/transformers.  Empty = use this
+# app's own .venv if the Qwen stack was installed into it.
+python = ""                          # [DOCAN_LLM_PYTHON]
+# Fallback only: path to a meeting-scribe checkout whose .venv has the ML stack +
+# cached Qwen weights.  Empty = look for ..\meeting-scribe next to this app.
+meeting_scribe_path = ""              # [DOCAN_LLM_MS_PATH]
+model = "Qwen/Qwen3-4B"              # [DOCAN_LLM_MODEL]  any Qwen3 instruct id
+dtype = "int8"                       # int8 (fastest on CPU) | bfloat16 | float32
+max_new_tokens = 1024                # [DOCAN_LLM_MAX_TOKENS]
+timeout_seconds = 900                # [DOCAN_LLM_TIMEOUT]  per generation call
+# Which steps actually call the model.  Local CPU generation with Qwen3-4B is slow
+# (~2 min to load + ~2 min per step) and, for the terse planning prompts, not very
+# reliable - so the DEFAULT is [] : a fast, deterministic heuristic planner that
+# still produces the full metric report.  Set to ["plan"] to let the model choose
+# the report sections / ranking basis / coaching cues; add "coaching" and/or
+# "narrative" for a model-written write-up (much slower).  --llm / --no-llm on the
+# CLI override this per run.
+steps = []                           # [DOCAN_LLM_STEPS]  subset of: plan, coaching, narrative
+
+[claude]
+# Optional. When enabled and a key is present, each session also produces a
+# short narrative synopsis and human-readable activity names from Claude.
+enabled = false                      # [DOCAN_CLAUDE_ENABLED]
+api_key = ""                         # [ANTHROPIC_API_KEY]
+model = "claude-sonnet-5"            # [DOCAN_CLAUDE_MODEL]
+max_docs_sent = 40                   # cap documents summarised remotely per session
+
+[output]
+# Default file format for the three result documents (synopsis, activity
+# breakdown, tools & versions) when the app / CLI doesn't set one per document.
+# One of: word | spreadsheet | presentation.
+default_format = "word"                             # [DOCAN_OUTPUT_FORMAT]
+# Also write the result documents into a timestamped subfolder of the analyzed
+# folder.  Local-folder sources only; online sources always use the session
+# folder regardless of this setting.
+write_to_source_folder = true                       # [DOCAN_WRITE_TO_SOURCE]
+# Name prefix for that subfolder:  <prefix>_<session id>/
+results_subfolder_prefix = "doc-analyzer-results"   # [DOCAN_RESULTS_PREFIX]
+
+# ---- Online sources -------------------------------------------------------
+# Only the block for the source kind you pick in the app needs to be filled in.
+
+[sources.git]
+# nothing required here; branch/depth are entered in the app's Options dialog
+
+[sources.http]
+# Optional bearer token for a protected index URL.
+token = ""                           # [DOCAN_HTTP_TOKEN]
+
+[sources.sharepoint]
+# Microsoft Graph, client-credentials flow.  Grant the app-registration
+# Files.Read.All (application) permission with admin consent.
+tenant_id = ""                       # [DOCAN_SP_TENANT]
+client_id = ""                       # [DOCAN_SP_CLIENT_ID]
+client_secret = ""                   # [DOCAN_SP_CLIENT_SECRET]
+# e.g. "contoso.sharepoint.com:/sites/Finance:" then the library path in the app
+site = ""                            # [DOCAN_SP_SITE]
+
+[sources.s3]
+region = ""                          # [AWS_DEFAULT_REGION]
+access_key_id = ""                   # [AWS_ACCESS_KEY_ID]
+secret_access_key = ""               # [AWS_SECRET_ACCESS_KEY]
+
+[sources.azure_blob]
+# Either a full connection string, or an account URL + SAS token.
+connection_string = ""               # [AZURE_STORAGE_CONNECTION_STRING]
+account_url = ""                     # [DOCAN_AZ_ACCOUNT_URL]
+sas_token = ""                       # [DOCAN_AZ_SAS]

@@ -1,0 +1,17 @@
+ACME SUPPLY CO — INVOICE INV-2026-021
+Date: 2026-03-19
+Bill To: Northwind Trading LLC, 400 Harbor Street, Portland
+
+Description                         Qty     Unit price     Amount
+Steel brackets, 12mm                  80        $4.50        $360.00
+Hex nuts, box of 100                  12        $9.00        $108.00
+Freight and handling                                          $75.00
+--------------------------------------------------------------------
+Subtotal                                                      $543.00
+Tax (8%)                                                       $43.44
+Total due                                                     $586.44
+
+Payment terms: net 30. Please pay the total due to ACME Supply Co by
+2026-04-18. Remit payment by ACH or check referencing INV-2026-021.
+We will ship the order after payment is received and confirmed.
+Questions: billing@acmesupply.example — +1 503 555 0142.

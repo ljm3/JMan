@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-analyzer"
+version = "1.0.0"
+description = "Self-contained desktop app: point it at a folder or online repository, analyze every document, produce a detailed synopsis, break down like activity across documents, and log each run session-by-session."
+requires-python = ">=3.11,<3.14"
+readme = "README.md"
+dependencies = [
+    # Runtime deps are pinned in requirements.txt (light, no compilers) and
+    # requirements-optional.txt (cloud sources, OCR, Claude) so the installer
+    # can stage them separately.
+]
+
+[project.scripts]
+doc-analyzer = "doc_analyzer.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "doc_analyzer",
+    "doc_analyzer.sources",
+    "doc_analyzer.extract",
+    "doc_analyzer.analyze",
+    "doc_analyzer.report",
+    "doc_analyzer.gui",
+    "doc_analyzer.llm",
+]
+
+[tool.setuptools.package-data]
+"doc_analyzer" = ["data/*"]

@@ -1,0 +1,21 @@
+# Local-LLM stack for the objective planner (Qwen3 via transformers).
+#
+# Installs into THIS app's .venv so the objective analysis no longer needs a
+# meeting-scribe checkout beside it.  Install with:
+#     .\setup.ps1 -LocalModel        (or  -Full, which implies it)
+# or directly:
+#     .\.venv\Scripts\python -m pip install -r requirements-llm.txt
+#
+# On Windows the default PyPI torch wheels are already CPU-only, so no special
+# index URL is needed.  ~2-3 GB installed; the Qwen3-4B weights (~8 GB) download
+# on the first objective run and are cached under ~/.cache/huggingface.
+#
+# When none of this is present the run falls back to the deterministic
+# heuristic planner - the local model is always optional.
+
+torch>=2.5,<2.8
+transformers>=4.51.0
+accelerate>=0.30.0
+sentencepiece>=0.2.0
+safetensors>=0.4.3
+huggingface-hub>=0.24.0

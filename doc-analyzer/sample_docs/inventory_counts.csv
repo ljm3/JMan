@@ -1,0 +1,7 @@
+sku,description,aisle,on_hand,reorder_point,unit_cost
+SB-12,Steel brackets 12mm,1,340,150,4.50
+AB-50,Anchor bolts box of 50,1,26,20,22.00
+HN-100,Hex nuts box of 100,2,58,40,9.00
+CR-08,Conveyor rollers 800mm,7,44,12,61.25
+LP-02,Label printer,10,2,1,480.00
+SC-14,Handheld scanner,10,13,4,210.00

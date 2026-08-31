@@ -1,0 +1,18 @@
+{
+  "project": "Harbor Warehouse Rollout",
+  "environment": "production",
+  "inventory_app": {
+    "version": "2.4.1",
+    "devices_deployed": 14,
+    "features": ["barcode_scan", "cycle_count", "label_print"]
+  },
+  "cutover": {
+    "planned_date": "2026-03-30",
+    "owner": "Dana Whitfield",
+    "rollback_window_hours": 6
+  },
+  "integrations": [
+    {"name": "carrier_api", "status": "configured"},
+    {"name": "erp_stock_sync", "status": "testing"}
+  ]
+}

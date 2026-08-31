@@ -1,0 +1,14 @@
+# Optional extras.  Install with:  .\setup.ps1 -Full
+# Every one of these degrades gracefully when absent - the app reports the
+# missing capability in the verbose log and the session tool report.
+
+requests>=2.31.0            # HTTP(S) source + SharePoint (Microsoft Graph) source
+extract-msg>=0.48.0        # Outlook .msg email files (.eml works without it)
+pymupdf>=1.24.0            # faster / higher-fidelity PDF text than pypdf when present
+pytesseract>=0.3.10        # OCR for scanned images  (also needs the Tesseract binary)
+Pillow>=10.0.0             # image loading for OCR
+pygments>=2.17.0           # language identification for source-code files
+boto3>=1.34.0              # Amazon S3 source
+azure-storage-blob>=12.19.0  # Azure Blob Storage source
+anthropic>=0.39.0          # optional Claude-enhanced narrative synopsis
+tomli-w>=1.0.0             # write config.toml back from the Settings dialog

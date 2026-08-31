@@ -1,0 +1,12 @@
+# Lightweight application dependencies - pure-Python wheels, no compilers needed.
+# Optional extras (cloud sources, OCR, Claude) live in requirements-optional.txt
+# and are installed by:  .\setup.ps1 -Full
+#
+# The GUI uses tkinter, which ships with the python.org / winget Python builds.
+
+python-docx>=1.1.0      # .docx
+openpyxl>=3.1.0         # .xlsx
+python-pptx>=0.6.23     # .pptx
+pypdf>=4.2.0            # .pdf text + metadata
+striprtf>=0.0.26        # .rtf
+PyYAML>=6.0             # .yaml / .yml
