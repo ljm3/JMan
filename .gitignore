@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Local, per-machine config (each app ships a config.example.toml instead)
+config.toml
+**/config.toml
+
+# doc-analyzer run output
+doc-analyzer/sessions/
+
+# meeting-scribe project files
+*.mscribe.json
