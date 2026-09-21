@@ -80,6 +80,8 @@ class Settings:
     status_tab_name: str = "Tracking Status"
     download_pod: bool = True
     reuse_delivered: bool = True
+    prn_tab_name: str = "PRN Status"
+    prn_write_back: bool = True          # add PRN Status / Pieces / Tracking # columns to the original tab
     last_file: str = ""
     last_gsheet_url: str = ""
 

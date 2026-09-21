@@ -102,7 +102,8 @@ class XlsxWorkbook:
         ws.freeze_panes = "B2"
         ws.auto_filter.ref = f"A1:{_col(len(headers))}{max(1, len(rows) + 1)}"
 
-    def link_source_cells(self, src_tab: str, links: list[tuple[int, int, int]], status_tab: str) -> int:
+    def link_source_cells(self, src_tab: str, links: list[tuple[int, int, int]], status_tab: str,
+                          tooltip: str = "Show tracking status") -> int:
         from openpyxl.cell.cell import MergedCell
         from openpyxl.worksheet.hyperlink import Hyperlink
 
@@ -113,13 +114,45 @@ class XlsxWorkbook:
             if isinstance(cell, MergedCell):
                 continue
             cell.hyperlink = Hyperlink(ref=cell.coordinate, location=f"{quote_tab(status_tab)}!A{target_row}",
-                                       tooltip="Show tracking status")
+                                       tooltip=tooltip)
             f = copy(cell.font)
             f.color = "0563C1"
             f.underline = "single"
             cell.font = f
             done += 1
         return done
+
+    def write_columns(self, tab: str, header_row: int, columns: list[tuple[int, str, dict[int, OutCell]]],
+                      first_row: int, last_row: int) -> None:
+        """Write whole columns on an existing tab: header (styled like its left neighbour) + values.
+
+        header_row is 1-based (0 = no header row). Rows first_row..last_row of each column are cleared first,
+        so a re-run leaves no stale values behind.
+        """
+        from openpyxl.cell.cell import MergedCell
+        from openpyxl.styles import Font, PatternFill
+
+        ws = self.wb[tab]
+        for col, header, values in columns:
+            if header_row:
+                cell = ws.cell(header_row, col)
+                if not isinstance(cell, MergedCell):
+                    cell.value = header
+                    left = ws.cell(header_row, col - 1) if col > 1 else None
+                    if left is not None and left.has_style and left.value not in (None, ""):
+                        cell.font, cell.fill = copy(left.font), copy(left.fill)
+                        cell.border, cell.alignment = copy(left.border), copy(left.alignment)
+                    else:
+                        cell.font = Font(bold=True)
+                ws.column_dimensions[_col(col)].width = max(ws.column_dimensions[_col(col)].width or 0,
+                                                            len(header) + 4)
+            for r in range(first_row, max(last_row, max(values, default=0)) + 1):
+                cell = ws.cell(r, col)
+                if isinstance(cell, MergedCell):
+                    continue
+                oc = values.get(r)
+                cell.value = _xl(oc.value) if oc else None
+                cell.fill = PatternFill("solid", fgColor=oc.fill) if oc and oc.fill else PatternFill(fill_type=None)
 
     def save(self) -> str:
         bdir = workspace_dir() / "backups"

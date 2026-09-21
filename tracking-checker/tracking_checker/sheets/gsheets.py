@@ -209,7 +209,8 @@ class GoogleWorkbook:
         self._pending = req
         self._status_gid = gid
 
-    def link_source_cells(self, src_tab: str, links: list[tuple[int, int, int]], status_tab: str) -> int:
+    def link_source_cells(self, src_tab: str, links: list[tuple[int, int, int]], status_tab: str,
+                          tooltip: str = "") -> int:   # Sheets links have no tooltip
         src_gid = self._gid(src_tab)
         for row, col, target_row in links:
             self._pending.append({"repeatCell": {
@@ -220,6 +221,35 @@ class GoogleWorkbook:
                 "fields": "userEnteredFormat.textFormat.link,userEnteredFormat.textFormat.underline,"
                           "userEnteredFormat.textFormat.foregroundColor"}})
         return len(links)
+
+    def write_columns(self, tab: str, header_row: int, columns: list[tuple[int, str, dict[int, OutCell]]],
+                      first_row: int, last_row: int) -> None:
+        """Write whole columns on an existing tab (see XlsxWorkbook.write_columns)."""
+        ws = self.sh.worksheet(tab)
+        last = max([last_row] + [max(v, default=0) for _, _, v in columns])
+        need_cols = max(c for c, _, _ in columns)
+        if ws.col_count < need_cols:
+            ws.add_cols(need_cols - ws.col_count)
+        if ws.row_count < last:
+            ws.add_rows(last - ws.row_count)
+        data, gid = [], ws.id
+        for col, header, values in columns:
+            if header_row:
+                data.append({"range": _a1(header_row, col), "values": [[header]]})
+                self._pending.append({"repeatCell": {"range": _cell_range(gid, header_row - 1, col - 1),
+                                                     "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                                                     "fields": "userEnteredFormat.textFormat.bold"}})
+            if last >= first_row:
+                block = [[_gs(values[r].value) if r in values else ""] for r in range(first_row, last + 1)]
+                data.append({"range": f"{_a1(first_row, col)}:{_a1(last, col)}", "values": block})
+            for r in range(first_row, last + 1):
+                fill = values[r].fill if r in values else ""
+                self._pending.append({"repeatCell": {
+                    "range": _cell_range(gid, r - 1, col - 1),
+                    "cell": {"userEnteredFormat": {"backgroundColor": _rgb(fill or "FFFFFF")}},
+                    "fields": "userEnteredFormat.backgroundColor"}})
+        if data:
+            ws.batch_update(data, value_input_option="RAW")
 
     def save(self) -> str:
         for i in range(0, len(self._pending), 500):

@@ -58,6 +58,35 @@ with your request and how it was interpreted.
 `out for delivery` · `weighs more than 20 lbs` · `POD missing` · `not found` / `errors` ·
 `only FedEx` · `service is overnight`. Anything else is reported back as "not understood".
 
+## PRN tab - UPS pickup request numbers
+
+The window has two tabs: **Tracking** (everything above) and **PRN**, which works the same way for
+UPS **pickup request numbers**:
+
+1. **Pick the spreadsheet** and press Load.
+2. **It finds the PRNs** (11 characters, e.g. `2900000AA11`; a header like *PRN*, *Pickup #* or
+   *Request #* helps) and each pickup's **ZIP code**: from a *Zip* / *Postal Code* column when the row
+   has one, otherwise parsed out of the address (`99 Park Ave, New York, NY 10016` -> `10016`; the
+   ZIP after the state code wins over a house number). Change the PRN column or the ZIP source in the
+   drop-downs if needed.
+3. **It looks up each pickup** on [ups.com/ipr/pickup-status-check](https://www.ups.com/ipr/pickup-status-check)
+   in the Edge window - fills in Country, PRN and ZIP, presses *Check Status* and reads what the page
+   gets back. Pickups from other carriers (a *Carrier* column saying FedEx, or a non-UPS confirmation
+   number in the PRN column) are listed but not looked up.
+4. **Writes the *PRN Status* tab**, one row per PRN: Status (Completed / Processing / Incomplete /
+   Cancelled, colour-coded) · Status Detail · Status Updated · Pickup Date · Pickup Window · Pieces ·
+   Service · Weight · Tracking Numbers · Company · Contact · Phone · Pickup Address · Pickup Point ·
+   Residential? · Notification Email · Special Instructions · charges · ZIP Used · ZIP Found In ·
+   UPS Status Code · link to the UPS page · Source Location · Data Source · Checked At · Error / Notes.
+5. **Links both ways**: each PRN on your tab links to its results row and each results row links back.
+6. **Adds columns to your tab** (option, on by default) in the first empty columns to the right of your
+   data: *PRN Status*, *PRN Pieces* and *PRN Tracking # 1, 2, ...*. A re-run reuses the same columns.
+
+**Tracking numbers:** UPS's pickup record holds only the package count and service (e.g. "UPS
+Ground x 4") - not the tracking numbers of the packages collected - so the tracking-number columns
+stay empty and *PRN Pieces* shows the count. The code keeps a tracking-number list per pickup, so a
+source for them can be added later.
+
 ## Install
 
 ```powershell
@@ -77,6 +106,8 @@ FedEx…* once and sign in with the accounts you ship on. For **FedEx**, add the
 $py = ".\.venv\Scripts\python"
 & $py -m tracking_checker --cli --file "C:\Shipping\Sept.xlsx" --check "not delivered yet; no update in 3 days"
 & $py -m tracking_checker --cli --gsheet "https://docs.google.com/spreadsheets/d/…/edit" --sheet Orders --column "Tracking #"
+& $py -m tracking_checker --prn --file "C:\Shipping\Pickups.xlsx"            # PRN tab, headless
+& $py -m tracking_checker --prn --file "C:\Shipping\Pickups.xlsx" --column "Pickup #" --zip-column E
 & $py -m tracking_checker --detect 1Z999AA10123456784 123456789012   # which carrier?
 & $py -m tracking_checker --doctor                                  # keys / libraries / settings
 & $py -m tracking_checker --selftest                                # offline end-to-end demo run
@@ -128,4 +159,5 @@ Automated use may be restricted by the carriers' website terms; the API route is
 
 Layout: `tracking_checker/detect.py` (carrier identification), `carriers/` (UPS, FedEx, USPS API
 clients, demo), `carriers/web/` (Edge browser worker + UPS/USPS/FedEx website readers), `sheets/` (Excel + Google adapters, column detection), `pod.py`, `checks/` (rules +
-Claude), `report.py` (columns), `pipeline.py`, `gui.py`, `settings_dialog.py`.
+Claude), `report.py` (columns), `pipeline.py`, `gui.py`, `settings_dialog.py`. PRN tab: `pickup/`
+(PRN + ZIP detection, `ups_web.py` pickup-page reader, `pipeline.py`, demo) and `gui_prn.py`.

@@ -60,8 +60,8 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_NAME} {__version__}")
-        self.geometry("980x860")
-        self.minsize(820, 700)
+        self.geometry("980x900")
+        self.minsize(820, 740)
         self.settings = config.Settings.load()
         self.q: queue.Queue = queue.Queue()
         self.wb = None
@@ -89,9 +89,16 @@ class App(tk.Tk):
         except tk.TclError:
             pass
         style.configure("Head.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        style.configure("TNotebook.Tab", font=("Segoe UI", 10, "bold"), padding=(14, 4))
+
+        # One tab per job; the progress bar and log below are shared.
+        self.nb = ttk.Notebook(self)
+        self.nb.pack(fill="x", padx=6, pady=(6, 0))
+        tt = ttk.Frame(self.nb)
+        self.nb.add(tt, text="Tracking")
 
         # 1. file
-        f1 = ttk.LabelFrame(self, text="1. Spreadsheet to examine", style="Head.TLabelframe")
+        f1 = ttk.LabelFrame(tt, text="1. Spreadsheet to examine", style="Head.TLabelframe")
         f1.pack(fill="x", **pad)
         self.var_kind = tk.StringVar(value="xlsx" if not self.settings.last_gsheet_url or self.settings.last_file else "gsheet")
         ttk.Radiobutton(f1, text="Excel file (.xlsx / .xlsm)", variable=self.var_kind, value="xlsx",
@@ -110,7 +117,7 @@ class App(tk.Tk):
         f1.columnconfigure(1, weight=1)
 
         # 2. where
-        f2 = ttk.LabelFrame(self, text="2. Where are the tracking numbers?", style="Head.TLabelframe")
+        f2 = ttk.LabelFrame(tt, text="2. Where are the tracking numbers?", style="Head.TLabelframe")
         f2.pack(fill="x", **pad)
         ttk.Label(f2, text="Tab:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
         self.cmb_tab = ttk.Combobox(f2, state="readonly", width=34)
@@ -125,7 +132,7 @@ class App(tk.Tk):
         f2.columnconfigure(3, weight=1)
 
         # 3. extra check
-        f3 = ttk.LabelFrame(self, text="3. Is there anything specific to check in addition to the typical tracking?",
+        f3 = ttk.LabelFrame(tt, text="3. Is there anything specific to check in addition to the typical tracking?",
                             style="Head.TLabelframe")
         f3.pack(fill="x", **pad)
         self.txt_check = tk.Text(f3, height=4, wrap="word", undo=True, font=("Segoe UI", 10))
@@ -136,7 +143,7 @@ class App(tk.Tk):
         self.lbl_engine.pack(anchor="w", padx=8, pady=(2, 6))
 
         # 4. options
-        f4 = ttk.LabelFrame(self, text="4. Options", style="Head.TLabelframe")
+        f4 = ttk.LabelFrame(tt, text="4. Options", style="Head.TLabelframe")
         f4.pack(fill="x", **pad)
         ttk.Label(f4, text="Results tab name:").grid(row=0, column=0, sticky="w", padx=8, pady=4)
         self.var_tab = tk.StringVar(value=self.settings.status_tab_name)
@@ -156,7 +163,7 @@ class App(tk.Tk):
         self.lbl_keys.grid(row=3, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 6))
 
         # 5. actions
-        f5 = ttk.Frame(self)
+        f5 = ttk.Frame(tt)
         f5.pack(fill="x", **pad)
         self.btn_run = ttk.Button(f5, text="Run check", command=self._run)
         self.btn_run.pack(side="left")
@@ -168,6 +175,10 @@ class App(tk.Tk):
         self.btn_pod = ttk.Button(f5, text="Open POD folder", command=self._open_pod, state="disabled")
         self.btn_pod.pack(side="left", padx=6)
         ttk.Button(f5, text="Help", command=self._help).pack(side="right")
+
+        from .gui_prn import PrnTab
+        self.prn_tab = PrnTab(self.nb, self)
+        self.nb.add(self.prn_tab, text="PRN")
 
         self.pb = ttk.Progressbar(self, mode="determinate", maximum=1.0)
         self.pb.pack(fill="x", padx=10)
