@@ -1,0 +1,23 @@
+# environments / caches
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# never commit credentials (the app keeps them in Windows Credential Manager / %APPDATA%)
+*.env
+.env*
+client_secret*.json
+credentials*.json
+service-account*.json
+*token*.json
+
+# never commit your spreadsheets or their proof-of-delivery folders
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+* - POD/

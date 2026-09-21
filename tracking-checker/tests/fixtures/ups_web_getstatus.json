@@ -1,0 +1,240 @@
+{
+ "statusCode": "200",
+ "statusText": "Successful",
+ "isLoggedInUser": false,
+ "trackDetails": [
+  {
+   "errorCode": null,
+   "errorText": null,
+   "trackingNumber": "1Z999AA10123456784",
+   "packageStatus": "Delivered",
+   "packageStatusType": "D",
+   "packageStatusCode": "011",
+   "simplifiedText": "",
+   "receivedBy": "TAYLOR",
+   "leftAt": "Other",
+   "leaveAt": null,
+   "cdiLeaveAt": null,
+   "shipToAddress": {
+    "streetAddress1": "",
+    "streetAddress2": "",
+    "streetAddress3": "",
+    "city": "LONGVIEW",
+    "state": "TX",
+    "province": null,
+    "country": "US",
+    "zipCode": "",
+    "companyName": "",
+    "attentionName": "",
+    "isAddressCorrected": false,
+    "isReturnAddress": false,
+    "isHoldAddress": false
+   },
+   "shipFromAddress": null,
+   "signatureImage": "",
+   "deliveryPhoto": null,
+   "additionalInformation": {
+    "serviceInformation": {
+     "serviceName": "UPS Express\u2122 12:00",
+     "serviceLink": null,
+     "serviceAttribute": null
+    },
+    "weight": "",
+    "weightUnit": null,
+    "shippedOrBilledDate": "02/16/2026"
+   },
+   "proofOfDeliveryUrl": "https://wwwapps.ups.com/WebTracking/processPOD?loc=en_US&amp;tracknum=1Z999AA10123456784",
+   "isDelivered": true,
+   "currentMilestone": {
+    "isCurrent": true,
+    "isCompleted": true,
+    "isFuture": false,
+    "isRFIDIcon": false,
+    "category": null,
+    "subMilestone": null,
+    "returnTrackingNumber": null,
+    "pTrackingNumber": null,
+    "cTrackingNumber": null,
+    "date": "12/05/2025",
+    "time": "10:29 A.M.",
+    "location": "LONGVIEW, TX, US",
+    "name": "Delivered",
+    "nameKey": "cms.stapp.delivered"
+   },
+   "shipmentProgressActivities": [
+    {
+     "date": "12/05/2025",
+     "time": "10:29 A.M.",
+     "location": "LONGVIEW, TX, US",
+     "activityScan": "DELIVERED ",
+     "activityAdditionalDescription": null,
+     "actCode": "9E",
+     "milestoneName": {
+      "name": "Delivered",
+      "nameKey": "cms.stapp.delivered"
+     }
+    },
+    {
+     "date": "12/05/2025",
+     "time": "10:20 A.M.",
+     "location": "Longview, TX, United States",
+     "activityScan": "Out For Delivery Today",
+     "activityAdditionalDescription": null,
+     "actCode": "OT",
+     "milestoneName": {
+      "name": "Out for Delivery",
+      "nameKey": "cms.stapp.outForDelivery"
+     }
+    },
+    {
+     "date": "12/05/2025",
+     "time": "9:26 A.M.",
+     "location": "Longview, TX, United States",
+     "activityScan": "Processing at UPS Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "DS",
+     "milestoneName": {
+      "name": "On the Way",
+      "nameKey": "cms.stapp.inTransit"
+     }
+    },
+    {
+     "date": "12/05/2025",
+     "time": "9:18 A.M.",
+     "location": "Longview, TX, United States",
+     "activityScan": "Processing at UPS Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "YP",
+     "milestoneName": null
+    },
+    {
+     "date": "12/05/2025",
+     "time": "9:16 A.M.",
+     "location": "Longview, TX, United States",
+     "activityScan": "Arrived at Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "AR",
+     "milestoneName": null
+    },
+    {
+     "date": "12/05/2025",
+     "time": "8:01 A.M.",
+     "location": "Shreveport, LA, United States",
+     "activityScan": "Departed from Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "DP",
+     "milestoneName": null
+    },
+    {
+     "date": "12/05/2025",
+     "time": "7:04 A.M.",
+     "location": "Shreveport, LA, United States",
+     "activityScan": "Arrived at Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "AR",
+     "milestoneName": null
+    },
+    {
+     "date": "12/05/2025",
+     "time": "6:42 A.M.",
+     "location": "",
+     "activityScan": "A late flight has caused a delay. Your package is scheduled to arrive today later than the communicated delivery time.",
+     "activityAdditionalDescription": null,
+     "actCode": "18",
+     "milestoneName": null
+    },
+    {
+     "date": "12/05/2025",
+     "time": "6:16 A.M.",
+     "location": "Little Rock, AR, United States",
+     "activityScan": "Departed from Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "DP",
+     "milestoneName": null
+    },
+    {
+     "date": "12/05/2025",
+     "time": "5:13 A.M.",
+     "location": "Little Rock, AR, United States",
+     "activityScan": "Arrived at Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "AR",
+     "milestoneName": null
+    },
+    {
+     "date": "12/05/2025",
+     "time": "4:34 A.M.",
+     "location": "Louisville, KY, United States",
+     "activityScan": "Departed from Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "DP",
+     "milestoneName": null
+    },
+    {
+     "date": "12/04/2025",
+     "time": "7:04 A.M.",
+     "location": "Houston, TX, United States",
+     "activityScan": "We&#39;ve corrected the postal code, and the package is on its way to the updated address.",
+     "activityAdditionalDescription": null,
+     "actCode": "AL",
+     "milestoneName": null
+    },
+    {
+     "date": "08/20/2025",
+     "time": "3:35 P.M.",
+     "location": "Swainsboro, GA, United States",
+     "activityScan": "The UPS Access Point\u2122 location has prepared the package for return to UPS or pickup by UPS.",
+     "activityAdditionalDescription": null,
+     "actCode": "ZO",
+     "milestoneName": {
+      "name": "Dropped off at UPS Access Point by Customer",
+      "nameKey": "cms.stapp.dropoffAccessPoint"
+     }
+    },
+    {
+     "date": "08/20/2025",
+     "time": "3:35 P.M.",
+     "location": "Swainsboro, GA, United States",
+     "activityScan": "Drop-Off",
+     "activityAdditionalDescription": null,
+     "actCode": "XD",
+     "milestoneName": null
+    },
+    {
+     "date": "08/20/2025",
+     "time": "6:14 A.M.",
+     "location": "Goodyear, AZ, United States",
+     "activityScan": "Arrived at Facility",
+     "activityAdditionalDescription": null,
+     "actCode": "OR",
+     "milestoneName": {
+      "name": "We have your Package",
+      "nameKey": "cms.stapp.weHaveYourPkg"
+     }
+    },
+    {
+     "date": "06/12/2025",
+     "time": "1:36 P.M.",
+     "location": "Los Angeles, CA, United States",
+     "activityScan": "Drop-Off",
+     "activityAdditionalDescription": null,
+     "actCode": "XD",
+     "milestoneName": null
+    },
+    {
+     "date": "",
+     "time": "",
+     "location": "Germany",
+     "activityScan": "Shipper created a label, UPS has not received the package yet. ",
+     "activityAdditionalDescription": null,
+     "actCode": "MP",
+     "milestoneName": {
+      "name": "Label Created",
+      "nameKey": "cms.stapp.orderReceived"
+     }
+    }
+   ],
+   "scheduledDeliveryDateDetail": null
+  }
+ ]
+}

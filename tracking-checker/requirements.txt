@@ -1,0 +1,10 @@
+openpyxl>=3.1.2
+pillow>=10.0            # lets openpyxl keep images already in your workbook
+requests>=2.31
+keyring>=25.0           # API keys -> Windows Credential Manager
+python-dateutil>=2.9
+gspread>=6.1            # Google Sheets
+google-auth>=2.29
+google-auth-oauthlib>=1.2
+playwright>=1.47        # website lookups (drives the installed Microsoft Edge)
+anthropic>=1.7       # optional Claude interpretation of the "anything specific to check?" box

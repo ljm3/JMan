@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tracking-check"
+version = "1.0.0"
+description = "Mass-check UPS / FedEx / USPS tracking numbers from an Excel or Google Sheets spreadsheet"
+requires-python = ">=3.11"
+readme = "README.md"
+
+[project.scripts]
+tracking-check = "tracking_checker.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["tracking_checker*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
