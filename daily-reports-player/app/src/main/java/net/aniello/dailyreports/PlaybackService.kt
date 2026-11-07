@@ -77,58 +77,12 @@ class PlaybackService : MediaSessionService() {
             androidx.core.content.ContextCompat.RECEIVER_EXPORTED
         )
 
-        // Two-second breather between reports (Luddy, 2026-11-05):
-        // when one item ends and the player auto-advances, hold the
-        // next item paused for two seconds before it starts. Manual
-        // skips are not delayed, and a user pressing play during the
-        // breather starts immediately.
-        val gapHandler = android.os.Handler(android.os.Looper.getMainLooper())
-        var gapPending: Runnable? = null
-        var gapActive = false
-        fun cancelGap() {
-            gapPending?.let { gapHandler.removeCallbacks(it) }
-            gapPending = null
-            gapActive = false
-        }
-        player.addListener(object : androidx.media3.common.Player.Listener {
-            override fun onMediaItemTransition(
-                mediaItem: androidx.media3.common.MediaItem?,
-                reason: Int
-            ) {
-                if (reason == androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    gapActive = true
-                    player.pause()
-                    val start = Runnable {
-                        gapPending = null
-                        if (gapActive && !player.playWhenReady &&
-                            player.currentPosition < 500
-                        ) {
-                            gapActive = false
-                            player.play()
-                        } else {
-                            gapActive = false
-                        }
-                    }
-                    gapPending = start
-                    gapHandler.postDelayed(start, 2000)
-                } else if (reason ==
-                    androidx.media3.common.Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
-                ) {
-                    // A manual skip during the breather means "play it
-                    // now" — cancel the hold and resume.
-                    val wasGap = gapActive
-                    cancelGap()
-                    if (wasGap && !player.playWhenReady) player.play()
-                }
-            }
-
-            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                // The listener fires synchronously inside our own
-                // pause() call, with gapActive already true — that one
-                // keeps the breather. Any play request cancels it.
-                if (playWhenReady) cancelGap()
-            }
-        })
+        // No app-side pause between reports (Luddy, 2026-11-06):
+        // v1.23 added a two-second hold on auto-advance, but every
+        // report file now ends with two seconds of silence baked
+        // in, so the app pause only stacked the gap to ~4 seconds.
+        // Removed at his direction — the file's own tail is the
+        // breather; auto-advance plays straight through.
 
         val openApp = PendingIntent.getActivity(
             this, 0,

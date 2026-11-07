@@ -58,9 +58,16 @@ class MainActivity : Activity() {
         private const val UPDATE_URL = "https://software.aniello.net/apps/daily-reports-player-version.json"
         private const val APK_BASE = "https://software.aniello.net/apps/"
 
-        // Canonical schedule order and display names, mirroring REPORTS in
-        // build_daily.py (the Daily page builder) exactly.
+        // Built-in display names and FALLBACK play order. The live
+        // play order comes from the manifest's "order" list
+        // (Luddy, 2026-11-07 — manifest-controlled, so a reorder
+        // needs no app update); this list still leads with the
+        // Operations and Health Report, which belongs to the day it
+        // publishes even though it recaps the day before, and
+        // otherwise mirrors REPORTS in build_daily.py (the Daily
+        // page builder).
         private val REPORTS = listOf(
+            "nightly-ops" to "Operations and Health Report",
             "news-summary" to "News Summary",
             "legislature" to "Legislature Report",
             "ai-news" to "AI News Summary",
@@ -69,8 +76,7 @@ class MainActivity : Activity() {
             "general-science" to "General Science News Summary",
             "meta-muse" to "Meta Muse News Summary",
             "ai-law-news" to "AI Law News (Weekly)",
-            "dc-law-news" to "Data Center Law News (Weekly)",
-            "nightly-ops" to "Operations and Health Report"
+            "dc-law-news" to "Data Center Law News (Weekly)"
         )
 
         private val BG = Color.parseColor("#0b0f16")
@@ -107,6 +113,7 @@ class MainActivity : Activity() {
     private lateinit var signInBox: LinearLayout
     private lateinit var mainBox: LinearLayout
     private lateinit var rowsBox: LinearLayout
+    private lateinit var trackScroll: ScrollView
     private lateinit var dateLabel: TextView
     private lateinit var nowTitle: TextView
     private lateinit var nowTime: TextView
@@ -141,6 +148,7 @@ class MainActivity : Activity() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             refreshNowPlaying()
             highlightCurrentRow()
+            scrollToCurrentRow()
             savePlayPoint()
         }
         override fun onPlaybackStateChanged(state: Int) {
@@ -507,6 +515,7 @@ class MainActivity : Activity() {
 
         // Track rows (scrollable)
         val scroll = ScrollView(this)
+        trackScroll = scroll
         scroll.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
         )
@@ -607,6 +616,7 @@ class MainActivity : Activity() {
                 ensurePlaylistLoaded()
                 refreshPlayButton()
                 refreshNowPlaying()
+                scrollToCurrentRow()
                 ui.removeCallbacks(ticker)
                 ui.post(ticker)
             } catch (e: Exception) {
@@ -630,7 +640,23 @@ class MainActivity : Activity() {
     private fun buildTracksFor(date: String): List<Track> {
         val entries = manifest?.optJSONObject("entries") ?: return emptyList()
         val out = mutableListOf<Track>()
-        val ordered = REPORTS.toMutableList()
+        // Play order comes from the manifest's "order" list when it
+        // carries one (Luddy, 2026-11-07): manifest order first, for
+        // the prefixes the app knows by name, then any built-in
+        // reports the manifest does not name, in built-in order.
+        // Without an "order" list, the built-in order applies as-is.
+        val names = REPORTS.toMap()
+        val ordered = mutableListOf<Pair<String, String>>()
+        val seen = mutableSetOf<String>()
+        val manifestOrder = manifest?.optJSONArray("order")
+        if (manifestOrder != null) {
+            for (i in 0 until manifestOrder.length()) {
+                val p = manifestOrder.optString(i)
+                val n = names[p]
+                if (n != null && seen.add(p)) ordered.add(p to n)
+            }
+        }
+        for ((p, n) in REPORTS) if (seen.add(p)) ordered.add(p to n)
         // Any prefix in the manifest but not in the canonical list goes last.
         val keys = entries.keys()
         while (keys.hasNext()) {
@@ -769,6 +795,42 @@ class MainActivity : Activity() {
                 val nameTv = child.findViewWithTag<TextView>("name")
                 val active = (child.tag as Int) == current && playlistLoadedFor == dates.getOrNull(dateIdx)
                 nameTv?.setTextColor(if (active) GOLD else TEXT)
+            }
+        }
+    }
+
+    /**
+     * Keep the playing item in view (Luddy, 2026-11-06): when the
+     * current track sits outside the visible part of the list —
+     * below it as playback advances, or above it after skipping
+     * back with the player buttons — scroll just enough that the
+     * current row and the next one both show. The gold name
+     * highlight on the current row is unchanged.
+     */
+    private fun scrollToCurrentRow() {
+        if (!::trackScroll.isInitialized) return
+        val c = controller ?: return
+        if (playlistLoadedFor != dates.getOrNull(dateIdx)) return
+        val current = c.currentMediaItemIndex
+        trackScroll.post {
+            var row: View? = null
+            var nextRow: View? = null
+            for (i in 0 until rowsBox.childCount) {
+                val child = rowsBox.getChildAt(i)
+                if (child is LinearLayout && child.tag is Int) {
+                    if ((child.tag as Int) == current) row = child
+                    else if ((child.tag as Int) == current + 1) nextRow = child
+                }
+            }
+            val r = row ?: return@post
+            val viewTop = trackScroll.scrollY
+            val viewBottom = viewTop + trackScroll.height
+            val wantBottom = nextRow?.bottom ?: r.bottom
+            when {
+                r.top < viewTop ->
+                    trackScroll.smoothScrollTo(0, maxOf(0, r.top - dp(8)))
+                wantBottom > viewBottom ->
+                    trackScroll.smoothScrollTo(0, wantBottom - trackScroll.height + dp(8))
             }
         }
     }

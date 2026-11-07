@@ -193,6 +193,61 @@ Sandbox build notes (learned on the first build, 2026-11-04):
   `47bc1c71a066c5e99d10435e35a6aadf993cd85d433d3f145b128113ee28747a`,
   same signing key; published and verified live 2026-11-05 (live
   download hashes identically).
+- **1.27 (versionCode 28)** — 2026-11-07. Play order is now
+  manifest-controlled at Luddy's direction: buildTracksFor reads
+  the manifest's "order" list (stamped by publish_daily.py,
+  preserved across publishes once present) and orders tracks by
+  it, falling back to the built-in REPORTS order when the
+  manifest carries none. The Daily web page takes the same list:
+  build_daily.py bakes it into the web player's sort AND lays the
+  page tiles out in it, so display order and play order match in
+  both players. Future reorderings are a manifest edit only.
+  APK: 5,522,238 bytes, SHA-256
+  `40be551a10d3e8aee576e76649886d4cfb615db96c6c3291ef1caaa46943b85f`,
+  same signing key; published to both version-JSON keys and
+  verified live 2026-11-07 (live download hashes identically;
+  software page shows 1.27).
+- **1.26 (versionCode 27)** — 2026-11-07. Playlist order at
+  Luddy's direction: the Operations and Health Report leads each
+  day, and it counts as part of the day it publishes (it posts at
+  12:10 AM recapping the day just ended). REPORTS in
+  MainActivity.kt now lists nightly-ops first; the nightly-ops
+  publish step passes the publish date to publish_daily.py, and
+  the three retained editions were re-filed under their publish
+  dates (the November 6 report now sits under November 7). The
+  ljm3.me/daily web player applies the same lead position in its
+  playlist sort; its tiles keep schedule order. APK: 5,521,862
+  bytes, SHA-256
+  `b1d3868dd31246490e989149f9ea193405841a51bc3aaa706a1fe266c95dacd2`,
+  same signing key; published to both version-JSON keys and
+  verified live 2026-11-07 (live download hashes identically;
+  software page shows 1.26).
+- **1.25 (versionCode 26)** — 2026-11-06. The app-side
+  two-second breather from 1.23 is REMOVED at Luddy's direction:
+  every report file now ends with two seconds of baked-in
+  silence, so the stacked ~4-second gap became the file's own
+  ~2 seconds. The PlaybackService transition listener is gone
+  entirely; auto-advance plays straight through. (This settles
+  the question left open on 2026-11-05.) APK: 5,521,910 bytes,
+  SHA-256
+  `e7a4c4b74001be180ee252320175e1aa42861c670958c365225def5dbac98cef`,
+  same signing key; published to both version-JSON keys and
+  verified live 2026-11-06 (live download hashes identically;
+  software page shows 1.25).
+- **1.24 (versionCode 25)** — 2026-11-06. Auto-scroll at Luddy's
+  direction: the track list now keeps the playing item in view.
+  On every media-item transition (auto-advance, the ⏮/⏭ buttons,
+  a row tap) and on controller connect, the list scrolls just
+  enough that the current row and the next one both show —
+  scrolling up as playback advances, or back down after skipping
+  to an earlier item. The gold name highlight on the current row
+  is unchanged; the two-second auto-transition breather is
+  unchanged (Luddy's separate call on that is still open). APK:
+  5,523,094 bytes, SHA-256
+  `f4c000556bc481c25d4890dc8d2f330c0aaa1690f4bc296cf8bb9eb70d1600cc`,
+  same signing key; published to both version-JSON keys and
+  verified live 2026-11-06 (live download hashes identically;
+  software page shows 1.24).
 - **1.23 (versionCode 24)** — 2026-11-05. Two player touches at
   Luddy's direction. (1) The AE eagle-A is now the media session
   artwork on every track (MediaMetadata artwork data, bundled logo),

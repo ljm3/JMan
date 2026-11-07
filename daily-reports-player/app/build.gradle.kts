@@ -18,8 +18,8 @@ android {
         applicationId = "net.aniello.dailyreports"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
-        versionName = "1.23"
+        versionCode = 28
+        versionName = "1.27"
     }
 
     signingConfigs {
