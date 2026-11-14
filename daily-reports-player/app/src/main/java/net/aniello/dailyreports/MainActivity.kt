@@ -54,6 +54,9 @@ class MainActivity : Activity() {
 
     companion object {
         private const val MANIFEST_URL = "https://ljm3.me/daily/manifest.json"
+        // Live refresh cadence (Luddy, 2026-11-14): while the app
+        // is open, the report list re-fetches once a minute.
+        private const val LIVE_REFRESH_MS = 60_000L
         private const val AUDIO_BASE = "https://ljm3.me/daily/audio/"
         private const val UPDATE_URL = "https://software.aniello.net/apps/daily-reports-player-version.json"
         private const val APK_BASE = "https://software.aniello.net/apps/"
@@ -127,6 +130,23 @@ class MainActivity : Activity() {
 
     private var tickCount = 0
 
+    // Live refresh (Luddy, 2026-11-14): while the app sits open in
+    // the foreground, re-fetch the manifest every minute so a report
+    // published during the morning appears in place — the web Daily
+    // page refreshes live; the app previously refreshed only when it
+    // returned to the foreground. Application stays safe through the
+    // existing path: loadManifest keeps the day tab the user is on,
+    // and ensurePlaylistLoaded leaves an unchanged queue untouched
+    // and re-maps a changed one around the live position, so a
+    // refresh never restarts or jumps what is playing. Quiet mode:
+    // a failed background fetch changes nothing on screen.
+    private val liveRefresh = object : Runnable {
+        override fun run() {
+            if (manifest != null) loadManifest(quiet = true)
+            ui.postDelayed(this, LIVE_REFRESH_MS)
+        }
+    }
+
     private val ticker = object : Runnable {
         override fun run() {
             refreshProgress()
@@ -165,6 +185,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        ui.removeCallbacks(liveRefresh)
         savePlayPoint()
         super.onPause()
     }
@@ -710,7 +731,15 @@ class MainActivity : Activity() {
         val c = controller ?: return
         if (dates.isEmpty()) return
         val date = dates[dateIdx]
-        if (playlistLoadedFor == date) return
+        // No same-date early return (fixed 1.28): the comparison below
+        // is the guard — it leaves the player alone only when the
+        // loaded items are exactly the current track list. The old
+        // early return made that comparison unreachable, so once a
+        // day's queue loaded (e.g. early morning, with only the first
+        // reports published), later manifest refreshes rebuilt the
+        // on-screen rows but never the player's queue, and row taps
+        // indexed into the stale, shorter queue — the Legislature row
+        // played the Ops full report (Luddy, 2026-11-07).
         val items = tracks.map { t ->
             val meta = MediaMetadata.Builder()
                 .setTitle(t.label)
@@ -878,14 +907,14 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun loadManifest() {
+    private fun loadManifest(quiet: Boolean = false) {
         lastManifestFetchMs = System.currentTimeMillis()
-        if (manifest == null) statusLine.text = "Loading reports…"
+        if (manifest == null && !quiet) statusLine.text = "Loading reports…"
         bgExecutor.execute {
             val json = fetchManifestJson()
             ui.post {
                 if (json == null) {
-                    statusLine.text = "Could not load the report list. Check your connection or credentials (Settings)."
+                    if (!quiet) statusLine.text = "Could not load the report list. Check your connection or credentials (Settings)."
                     return@post
                 }
                 // Keep the day tab the user is on if it still exists.
@@ -927,6 +956,8 @@ class MainActivity : Activity() {
             System.currentTimeMillis() - lastManifestFetchMs > 30_000) {
             loadManifest()
         }
+        ui.removeCallbacks(liveRefresh)
+        ui.postDelayed(liveRefresh, LIVE_REFRESH_MS)
         // Automatic update check on return to the foreground too —
         // at launch alone, the v1.4 prompt never reached Luddy.
         checkForUpdate()

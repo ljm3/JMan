@@ -193,6 +193,27 @@ Sandbox build notes (learned on the first build, 2026-11-04):
   `47bc1c71a066c5e99d10435e35a6aadf993cd85d433d3f145b128113ee28747a`,
   same signing key; published and verified live 2026-11-05 (live
   download hashes identically).
+- **1.28 (versionCode 29)** — 2026-11-07. Playback fix at
+  Luddy's report: the Legislature row played the Ops & Health
+  full report and the AI News row played the News Summary full
+  report, with titles and times showing the correct reports.
+  Root cause: ensurePlaylistLoaded returned early whenever the
+  day's queue had loaded once, which made its exact-match
+  comparison below unreachable — after an early-morning load
+  (queue: only Ops and News Summary published), later manifest
+  refreshes rebuilt the on-screen rows but never the player's
+  queue, so taps and auto-advance indexed into the stale,
+  shorter queue (row 2 = Ops full, row 3 = News full — exactly
+  the two crossings Luddy heard). The early return is removed;
+  the comparison now governs, rebuilding the queue when the
+  track list changes while preserving the playing item's
+  position when it survives. Server content was verified
+  correct throughout (manifest durations and the Worker's
+  verbatim file serving). APK: 5,522,098 bytes, SHA-256
+  `06fa2e696227e4328af8a2a71d437bdf6c8e57b1cc356ba70b4fd2b129cf3e49`,
+  same signing key; published to both version-JSON keys and
+  verified live 2026-11-07 (live download hashes identically;
+  software page shows 1.28).
 - **1.27 (versionCode 28)** — 2026-11-07. Play order is now
   manifest-controlled at Luddy's direction: buildTracksFor reads
   the manifest's "order" list (stamped by publish_daily.py,
@@ -515,3 +536,24 @@ Cloudflare tooling (cf.py r2-put).
   behind the same dashboard Basic Auth as `/daily` and
   `/daily/audio`, with `Content-Type: application/json` and
   `Cache-Control: no-store`.
+
+- **1.29 (versionCode 30)** — 2026-11-14. Live refresh, at Luddy's
+  direction ("Live refresh in daily app would be nice" — the web Daily
+  page refreshes live while open; the app refreshed only on return to
+  the foreground). While the app is in the foreground, a Handler loop
+  re-fetches the manifest every 60 seconds (LIVE_REFRESH_MS), started
+  in onResume and stopped in onPause. The fetch runs through
+  loadManifest(quiet = true): a failed background fetch changes
+  nothing on screen (no loading text, no error line). Application is
+  the proven safe path — loadManifest keeps the day tab the user is
+  on, showDate rebuilds the rows, and ensurePlaylistLoaded leaves an
+  unchanged queue completely untouched and re-maps a changed one
+  around the live position (restoring wasPlaying), so a refresh can
+  never restart or jump what is playing; a newly published report
+  simply appears in the list and the queue. APK: 5,522,434 bytes,
+  SHA-256 b3dd5b8826e4e5be9e8adab117a3906a759d6154a9bad387d1e425c1713b82dc,
+  same signing key as always; published to
+  software/daily-reports-player.apk with the version JSON at both R2
+  keys; live download verified byte-identical. Awaiting Luddy's
+  on-device verification; the GitHub snapshot follows it (repo stands
+  at v1.27 + will take 1.28 and 1.29 together once both verify).
