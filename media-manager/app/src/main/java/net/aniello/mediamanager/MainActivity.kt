@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Base64
@@ -429,19 +430,25 @@ class MainActivity : Activity() {
                         lists[type] = items.toMutableList()
                         dirty[type] = false
                     }
+                    // The finished status is recorded for the tab whether
+                    // or not it is on screen (Luddy, 2026-11-14): both tabs
+                    // load at startup, and a tab whose load finished in the
+                    // background used to sit on "Loading..." forever when
+                    // switched to. setStatus already paints only the
+                    // visible tab; storing must be unconditional.
+                    setStatus("${lists[type]?.size ?: 0} $type, in the order they appear on the page. Drag the ≡ handle to reorder, then Save Order.", type)
                     if (type == currentType) {
                         adapter.notifyDataSetChanged()
                         updateSaveOrder()
                         swipe.isRefreshing = false
-                        setStatus("${lists[type]?.size ?: 0} $type, in the order they appear on the page. Drag the ≡ handle to reorder, then Save Order.", type)
                     }
                 }
             } catch (e: Exception) {
                 Diag.record(this, "refresh $type", e)
                 post {
+                    setStatus("Could not load $type: ${e.message}", type)
                     if (type == currentType) {
                         swipe.isRefreshing = false
-                        setStatus("Could not load $type: ${e.message}", type)
                     }
                 }
             }
@@ -767,16 +774,23 @@ class MainActivity : Activity() {
     private var progressBar: ProgressBar? = null
     private var progressText: TextView? = null
 
+    // The import menu is one common list on both tabs (Luddy, 2026-11-14):
+    // the same ten sources in the same order everywhere; only the first
+    // entry's wording follows the tab (Photo on Photos, Video on Videos).
+    // Sources not yet connected (Google Drive, Microsoft OneDrive) stay
+    // on the list and say so when tapped.
     private fun showSourceSheet(type: String) {
         pendingType = type
         val kind = if (type == "photos") "Photo" else "Video"
         val options = arrayOf(
-            "From this phone — ${kind}s",
-            "From this phone — Files",
-            "Browse my Dropbox",
-            "From Dropbox or a web link",
-            "From a network share (WebDAV)",
-            "From Amazon Photos",
+            "From Device - $kind",
+            "From Device - Files",
+            "From Web Link",
+            "From Network Share",
+            "From Dropbox",
+            "From Google Drive",
+            "From Microsoft OneDrive",
+            "From Amazon Photo",
             "From Facebook",
             "From Instagram")
         AlertDialog.Builder(this)
@@ -785,12 +799,14 @@ class MainActivity : Activity() {
                 when (which) {
                     0 -> launchGallery(type)
                     1 -> launchFiles(type, exportMode = false)
-                    2 -> showDropboxBrowser(type, "")
-                    3 -> showImportUrlDialog(type)
-                    4 -> showWebDavDialog(type)
-                    5 -> showGuidedDialog("amazon")
-                    6 -> showGuidedDialog("facebook")
-                    7 -> showGuidedDialog("instagram")
+                    2 -> showImportUrlDialog(type)
+                    3 -> showWebDavDialog(type)
+                    4 -> openDropboxBrowser(type)
+                    5 -> showNotConnectedDialog("Google Drive")
+                    6 -> showNotConnectedDialog("Microsoft OneDrive")
+                    7 -> showGuidedDialog("amazon")
+                    8 -> showGuidedDialog("facebook")
+                    9 -> showGuidedDialog("instagram")
                 }
             }
             .show()
@@ -802,6 +818,7 @@ class MainActivity : Activity() {
             this.type = if (type == "photos") "image/*" else "video/*"
             addCategory(Intent.CATEGORY_OPENABLE)
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            navDeviceInitialUri()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
         }
         startActivityForResult(Intent.createChooser(intent, "Choose media"), REQ_GALLERY)
     }
@@ -816,6 +833,7 @@ class MainActivity : Activity() {
                 else -> "video/*"
             }
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            navDeviceInitialUri()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
         }
         startActivityForResult(intent, REQ_FILES)
     }
@@ -828,6 +846,7 @@ class MainActivity : Activity() {
         data.clipData?.let { cd -> for (i in 0 until cd.itemCount) cd.getItemAt(i).uri?.let { uris.add(it) } }
         if (uris.isEmpty()) data.data?.let { uris.add(it) }
         if (uris.isEmpty()) return
+        navSaveDevicePlace(uris.first())
         startUploadQueue(pendingType, uris)
     }
 
@@ -1072,13 +1091,90 @@ class MainActivity : Activity() {
         progressDialog = null
     }
 
+    // ------------------------------------------------------------ place memory
+    // The app remembers where browsing left off, per source, so coming
+    // back does not mean walking the whole path again (Luddy, 2026-11-14).
+    // The place is kept for 24 hours; after that, browsing starts at the
+    // top level again. The same store serves every browsable source.
+    private fun navRememberedPath(source: String): String {
+        val p = getSharedPreferences("nav_state", MODE_PRIVATE)
+        val at = p.getLong("path_${source}_at", 0L)
+        if (at == 0L) return ""
+        if (System.currentTimeMillis() - at > 24L * 60L * 60L * 1000L) return ""
+        return p.getString("path_$source", "") ?: ""
+    }
+
+    private fun navSavePath(source: String, path: String) {
+        getSharedPreferences("nav_state", MODE_PRIVATE).edit()
+            .putString("path_$source", path)
+            .putLong("path_${source}_at", System.currentTimeMillis())
+            .apply()
+    }
+
+    // The device pickers are Android's own screens, so the app cannot
+    // hold them in place directly — the best it can do is hand the Files
+    // picker the folder the last pick came from as its starting point
+    // (EXTRA_INITIAL_URI), kept under the same 24-hour rule.
+    private fun navDeviceInitialUri(): Uri? {
+        val p = getSharedPreferences("nav_state", MODE_PRIVATE)
+        val at = p.getLong("device_parent_at", 0L)
+        if (at == 0L) return null
+        if (System.currentTimeMillis() - at > 24L * 60L * 60L * 1000L) return null
+        val stored = p.getString("device_parent_uri", null) ?: return null
+        return try { Uri.parse(stored) } catch (e: Exception) { null }
+    }
+
+    private fun navSaveDevicePlace(uri: Uri) {
+        try {
+            val docId = DocumentsContract.getDocumentId(uri)
+            if (!docId.contains('/')) return
+            val parent = DocumentsContract.buildDocumentUri(uri.authority, docId.substringBeforeLast('/'))
+            getSharedPreferences("nav_state", MODE_PRIVATE).edit()
+                .putString("device_parent_uri", parent.toString())
+                .putLong("device_parent_at", System.currentTimeMillis())
+                .apply()
+        } catch (e: Exception) {
+            // Not a documents-provider pick (for example a media-store
+            // pick) — there is no folder the app can hand back later.
+        }
+    }
+
+    // The network-share dialog remembers the address it last used — the
+    // share address is the "place" there — under the same 24-hour rule.
+    private fun navWebDavAddress(): String {
+        val p = getSharedPreferences("nav_state", MODE_PRIVATE)
+        val at = p.getLong("webdav_at", 0L)
+        if (at == 0L) return ""
+        if (System.currentTimeMillis() - at > 24L * 60L * 60L * 1000L) return ""
+        return p.getString("webdav_url", "") ?: ""
+    }
+
+    private fun navSaveWebDavAddress(u: String) {
+        getSharedPreferences("nav_state", MODE_PRIVATE).edit()
+            .putString("webdav_url", u)
+            .putLong("webdav_at", System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun openDropboxBrowser(type: String) {
+        showDropboxBrowser(type, navRememberedPath("dropbox"))
+    }
+
+    private fun showNotConnectedDialog(name: String) {
+        AlertDialog.Builder(this)
+            .setTitle("From $name")
+            .setMessage("$name is on the import list but is not connected yet. Connecting it takes the same one-time setup Dropbox got; until then this entry is a placeholder.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     // ------------------------------------------------------------ Dropbox browse (Stage 2)
     // The server holds the Dropbox sign-in (connected once at
     // ljm3.me/oauth/dropbox); the app only browses and picks. Picking a
     // file asks Title + Year, then the server copies it straight from
     // Dropbox into the library — the file never passes through the phone.
 
-    private fun showDropboxBrowser(type: String, path: String) {
+    private fun showDropboxBrowser(type: String, path: String, isFallback: Boolean = false) {
         showProgress("Dropbox", "Loading…", indeterminate = true)
         thread {
             try {
@@ -1086,12 +1182,20 @@ class MainActivity : Activity() {
                 post { hideProgress(); showDropboxEntries(type, path, entries) }
             } catch (e: Exception) {
                 Diag.record(this, "dropboxList", e)
-                post { hideProgress(); toast("Dropbox: ${e.message}") }
+                if (path.isNotEmpty() && !isFallback) {
+                    // A remembered folder may have been moved or deleted:
+                    // forget it and reopen at the top level rather than fail.
+                    navSavePath("dropbox", "")
+                    post { hideProgress(); toast("That Dropbox folder is no longer there — opening the top level."); showDropboxBrowser(type, "", isFallback = true) }
+                } else {
+                    post { hideProgress(); toast("Dropbox: ${e.message}") }
+                }
             }
         }
     }
 
     private fun showDropboxEntries(type: String, path: String, entries: List<Api.DbxEntry>) {
+        navSavePath("dropbox", path)
         val allowed = if (type == "photos") setOf("jpg", "jpeg", "png", "webp", "gif") else setOf("mp4", "webm")
         val labels = ArrayList<String>()
         val actions = ArrayList<() -> Unit>()
@@ -1219,15 +1323,17 @@ class MainActivity : Activity() {
             textSize = 13f; setTextColor(SUB)
         })
         val urlF = field("https://server/…/file")
+        navWebDavAddress().takeIf { it.isNotEmpty() }?.let { urlF.setText(it) }
         val userF = field("Username (optional)")
         val passF = field("Password (optional)", android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD)
         col.addView(urlF); col.addView(userF); col.addView(passF)
         AlertDialog.Builder(this)
-            .setTitle("From a network share (WebDAV)")
+            .setTitle("From Network Share")
             .setView(col)
             .setPositiveButton("Download") { _, _ ->
                 val u = urlF.text.toString().trim()
                 if (u.isEmpty()) { toast("The file address is needed."); return@setPositiveButton }
+                navSaveWebDavAddress(u)
                 val auth = if (userF.text.toString().isNotEmpty()) {
                     "Basic " + Base64.encodeToString("${userF.text}:${passF.text}".toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
                 } else null

@@ -1,1 +1,6 @@
-{"versionCode": 6, "versionName": "1.5", "apk": "media-manager.apk", "notes": "New in 1.5: the installed version now shows under the app title — \"Version:  1.5\" — in the same small format as the Daily Reports Player and the Approve Player, read from the package itself so it always matches the build on your phone. Everything from 1.4 is included: automatic poster capture when you add a video, the Options panel, per-tab status line and Add button, Rename with tap-to-select, and rounded buttons."}
+{
+ "versionCode": 10,
+ "versionName": "1.9",
+ "apk": "media-manager.apk",
+ "notes": "New in 1.9: the status line now settles on the real status when loading finishes. Both tabs load at startup, and the tab that finished loading in the background used to keep showing Loading when you switched to it - its finished status is now recorded either way. Everything from 1.8 is included: place memory across all import functions and the common ten-source Add menu."
+}
