@@ -32,7 +32,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import android.graphics.drawable.GradientDrawable
+import android.media.MediaMetadataRetriever
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -240,10 +242,26 @@ class MainActivity : Activity() {
             setImageResource(R.drawable.ljm3_logo)
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
         })
-        header.addView(label("LJM3 Media Manager", 18f, GOLD).apply {
+        val titleCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setPadding(dp(10), 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
+        }
+        titleCol.addView(label("LJM3 Media Manager", 18f, GOLD))
+        // Installed version, shown small right under the app title —
+        // the Daily Reports Player / Approve Player format (Luddy,
+        // 2026-11-13). Read from the package so it can never drift
+        // from the build actually on the phone.
+        val versionText = try {
+            "Version:  " + (packageManager.getPackageInfo(packageName, 0).versionName ?: "")
+        } catch (e: Exception) { "" }
+        if (versionText.isNotBlank()) {
+            titleCol.addView(label(versionText, 12f, SUB).apply {
+                includeFontPadding = false
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(1) }
+            })
+        }
+        header.addView(titleCol)
         val optionsBtn = darkButton("Options").apply { textSize = 12f }
         optionsBtn.setOnClickListener {
             optionsPanel.visibility = if (optionsPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
@@ -755,6 +773,7 @@ class MainActivity : Activity() {
         val options = arrayOf(
             "From this phone — ${kind}s",
             "From this phone — Files",
+            "Browse my Dropbox",
             "From Dropbox or a web link",
             "From a network share (WebDAV)",
             "From Amazon Photos",
@@ -766,11 +785,12 @@ class MainActivity : Activity() {
                 when (which) {
                     0 -> launchGallery(type)
                     1 -> launchFiles(type, exportMode = false)
-                    2 -> showImportUrlDialog(type)
-                    3 -> showWebDavDialog(type)
-                    4 -> showGuidedDialog("amazon")
-                    5 -> showGuidedDialog("facebook")
-                    6 -> showGuidedDialog("instagram")
+                    2 -> showDropboxBrowser(type, "")
+                    3 -> showImportUrlDialog(type)
+                    4 -> showWebDavDialog(type)
+                    5 -> showGuidedDialog("amazon")
+                    6 -> showGuidedDialog("facebook")
+                    7 -> showGuidedDialog("instagram")
                 }
             }
             .show()
@@ -944,6 +964,53 @@ class MainActivity : Activity() {
     }
     @Volatile private var uploadCursor: Int = 1
 
+    // ------------------------------------------------------------ posters
+    // A video's page poster is a frame a few seconds in, at most 640 px on
+    // the long edge, JPEG quality 80 — the same shape as the posters the
+    // migration made. Uploaded under the video's poster key; the
+    // server-side poster sweep backstops anything the app cannot make.
+
+    private fun posterJpeg(frame: Bitmap?): ByteArray? {
+        if (frame == null) return null
+        val scale = minOf(1f, 640f / maxOf(frame.width, frame.height).toFloat())
+        val bmp = if (scale < 1f) Bitmap.createScaledBitmap(frame, (frame.width * scale).toInt().coerceAtLeast(1), (frame.height * scale).toInt().coerceAtLeast(1), true) else frame
+        val out = ByteArrayOutputStream()
+        val ok = bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        if (bmp !== frame) bmp.recycle()
+        frame.recycle()
+        return if (ok) out.toByteArray() else null
+    }
+
+    private fun posterFromFile(file: File): ByteArray? {
+        val mmr = MediaMetadataRetriever()
+        return try {
+            mmr.setDataSource(file.absolutePath)
+            posterJpeg(mmr.getFrameAtTime(5_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: mmr.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC))
+        } catch (e: Exception) { null } finally { try { mmr.release() } catch (e: Exception) { } }
+    }
+
+    private fun posterFromUrl(url: String): ByteArray? {
+        // Mirror the server's Dropbox normalization so the retriever reaches the file itself.
+        val direct = if (url.contains("dropbox.com")) url.replace("dl=0", "dl=1") else url
+        val mmr = MediaMetadataRetriever()
+        return try {
+            mmr.setDataSource(direct, HashMap<String, String>())
+            posterJpeg(mmr.getFrameAtTime(5_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: mmr.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC))
+        } catch (e: Exception) { null } finally { try { mmr.release() } catch (e: Exception) { } }
+    }
+
+    /** Best-effort poster upload for a stored video; failure never reaches the caller. */
+    private fun uploadPoster(videoKey: String, jpeg: ByteArray?): Boolean {
+        if (jpeg == null || jpeg.isEmpty()) return false
+        return try {
+            Api.putBytes(this, MediaItem(videoKey, "", 0, false).posterKey, jpeg)
+            true
+        } catch (e: Exception) {
+            Diag.record(this, "poster $videoKey", e)
+            false
+        }
+    }
+
     private fun uploadStagedFile(type: String, file: File, key: String, onDone: (Boolean) -> Unit) {
         showProgress("Uploading", key.substringAfterLast('/'), indeterminate = false)
         thread {
@@ -952,9 +1019,10 @@ class MainActivity : Activity() {
                     post { setProgress(if (total > 0) (sent * 1000 / total).toInt() else 0, "${fmtSize(sent)} of ${fmtSize(total)}") }
                 }
                 if (type == "photos") Api.putFile(this, key, file, cb) else Api.multipartUpload(this, key, file, cb)
+                val posterOk = if (type == "videos") uploadPoster(key, posterFromFile(file)) else false
                 post {
                     hideProgress()
-                    toast("Added: ${key.substringAfterLast('/')}")
+                    toast("Added: ${key.substringAfterLast('/')}" + if (type == "videos") (if (posterOk) " · poster added" else " · poster comes from the sweep") else "")
                     onDone(true)
                 }
             } catch (e: Exception) {
@@ -1004,6 +1072,99 @@ class MainActivity : Activity() {
         progressDialog = null
     }
 
+    // ------------------------------------------------------------ Dropbox browse (Stage 2)
+    // The server holds the Dropbox sign-in (connected once at
+    // ljm3.me/oauth/dropbox); the app only browses and picks. Picking a
+    // file asks Title + Year, then the server copies it straight from
+    // Dropbox into the library — the file never passes through the phone.
+
+    private fun showDropboxBrowser(type: String, path: String) {
+        showProgress("Dropbox", "Loading…", indeterminate = true)
+        thread {
+            try {
+                val entries = Api.dropboxList(this, path)
+                post { hideProgress(); showDropboxEntries(type, path, entries) }
+            } catch (e: Exception) {
+                Diag.record(this, "dropboxList", e)
+                post { hideProgress(); toast("Dropbox: ${e.message}") }
+            }
+        }
+    }
+
+    private fun showDropboxEntries(type: String, path: String, entries: List<Api.DbxEntry>) {
+        val allowed = if (type == "photos") setOf("jpg", "jpeg", "png", "webp", "gif") else setOf("mp4", "webm")
+        val labels = ArrayList<String>()
+        val actions = ArrayList<() -> Unit>()
+        if (path.isNotEmpty()) {
+            labels.add("⬆  Up one level")
+            val parent = path.substringBeforeLast('/', "")
+            actions.add { showDropboxBrowser(type, parent) }
+        }
+        var hidden = 0
+        for (e in entries) {
+            if (e.tag == "folder") {
+                labels.add("📁  ${e.name}")
+                val p = e.path
+                actions.add { showDropboxBrowser(type, p) }
+            } else if (e.name.substringAfterLast('.', "").lowercase() in allowed) {
+                labels.add("${e.name}  (${fmtSize(e.size)})")
+                actions.add { showDropboxNameDialog(type, e) }
+            } else hidden++
+        }
+        if (actions.isEmpty()) {
+            labels.add("(nothing here that can be added)")
+            actions.add { }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (path.isEmpty()) "Dropbox — top level" else "Dropbox — ${path.substringAfterLast('/')}")
+            .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
+            .setNegativeButton("Close", null)
+            .show()
+        if (hidden > 0) toast("$hidden file(s) here are not ${if (type == "photos") "photos" else "videos"} and are not shown.")
+    }
+
+    private fun showDropboxNameDialog(type: String, entry: Api.DbxEntry) {
+        var preTitle = entry.name.substringBeforeLast('.', entry.name)
+        var preYear = ""
+        val m = Regex("^(.+?)\\s*-\\s*(\\d{4})$").find(preTitle)
+        if (m != null) { preTitle = m.groupValues[1]; preYear = m.groupValues[2] }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        col.addView(TextView(this).apply { text = "“${entry.name}” (${fmtSize(entry.size)}) will be copied from Dropbox as the next ${if (type == "photos") "photo" else "video"}."; textSize = 13f; setTextColor(SUB) })
+        val titleF = field("Title").apply { setText(preTitle) }
+        val yearF = field("Year (4 digits)").apply {
+            setText(preYear)
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        col.addView(titleF)
+        col.addView(yearF)
+        AlertDialog.Builder(this)
+            .setTitle(if (type == "photos") "Name this photo" else "Name this video")
+            .setView(col)
+            .setPositiveButton("Import") { _, _ ->
+                val t = titleF.text.toString().trim()
+                val y = yearF.text.toString().trim()
+                if (t.isEmpty() || !Regex("^\\d{4}$").matches(y)) {
+                    toast("A title and a 4-digit year are needed.")
+                    return@setPositiveButton
+                }
+                showProgress("Importing", "The server is copying the file from Dropbox…", indeterminate = true)
+                thread {
+                    try {
+                        val key = Api.dropboxImport(this, entry.path, type, t, y)
+                        post { hideProgress(); toast("Imported: ${key.substringAfterLast('/')}" + if (type == "videos") " · poster comes from the sweep" else ""); refresh(type, keepOrder = false) }
+                    } catch (e: Exception) {
+                        Diag.record(this, "dropboxImport", e)
+                        post { hideProgress(); toast("Import failed: ${e.message}") }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     // ------------------------------------------------------------ link import
 
     private fun showImportUrlDialog(type: String) {
@@ -1034,7 +1195,8 @@ class MainActivity : Activity() {
                 thread {
                     try {
                         val key = Api.importUrl(this, u, type, t, y)
-                        post { hideProgress(); toast("Imported: ${key.substringAfterLast('/')}"); refresh(type, keepOrder = false) }
+                        val posterOk = if (type == "videos") uploadPoster(key, posterFromUrl(u)) else false
+                        post { hideProgress(); toast("Imported: ${key.substringAfterLast('/')}" + if (type == "videos") (if (posterOk) " · poster added" else " · poster comes from the sweep") else ""); refresh(type, keepOrder = false) }
                     } catch (e: Exception) {
                         Diag.record(this, "importUrl", e)
                         post { hideProgress(); toast("Import failed: ${e.message}") }

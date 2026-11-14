@@ -100,6 +100,37 @@ object Api {
         return r.getString("key")
     }
 
+    /** One Dropbox entry, as served by GET /media-admin/dropbox/list. */
+    data class DbxEntry(val tag: String, val name: String, val path: String, val size: Long)
+
+    /**
+     * Browse the connected Dropbox (Stage 2): the server holds the
+     * Dropbox sign-in and lists with it; the app never sees a token.
+     */
+    fun dropboxList(context: Context, path: String): List<DbxEntry> {
+        val conn = connect(context, "$BASE/media-admin/dropbox/list?path=${enc(path)}", "GET")
+        conn.readTimeout = 120_000
+        val body = readBody(conn)
+        if (conn.responseCode != 200) {
+            val msg = try { JSONObject(body).optString("error") } catch (e: Exception) { "" }
+            throw ApiException(conn.responseCode, if (msg.isNotEmpty()) msg else "Dropbox list failed (HTTP ${conn.responseCode}).")
+        }
+        val arr = JSONArray(body)
+        val out = ArrayList<DbxEntry>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            out.add(DbxEntry(o.getString("tag"), o.getString("name"), o.optString("path", ""), o.optLong("size", 0)))
+        }
+        return out
+    }
+
+    /** Server-side copy of one Dropbox file into the library; returns the stored key. */
+    fun dropboxImport(context: Context, path: String, type: String, title: String, year: String): String {
+        val r = postJson(context, "/media-admin/dropbox/import",
+            JSONObject().put("path", path).put("type", type).put("title", title).put("year", year))
+        return r.getString("key")
+    }
+
     /** Single-shot PUT (photos). Reports byte progress; returns the stored size. */
     fun putFile(context: Context, key: String, file: File, onProgress: (Long, Long) -> Unit): Long {
         val conn = connect(context, "$BASE/media-admin/put?key=${enc(key)}", "PUT")
@@ -123,6 +154,18 @@ object Api {
         val body = readBody(conn)
         if (conn.responseCode != 200) throw ApiException(conn.responseCode, "Upload failed (HTTP ${conn.responseCode}).")
         return JSONObject(body).optLong("size", total)
+    }
+
+    /** Single-shot PUT of in-memory bytes (video posters). Returns the stored size. */
+    fun putBytes(context: Context, key: String, bytes: ByteArray): Long {
+        val conn = connect(context, "$BASE/media-admin/put?key=${enc(key)}", "PUT")
+        conn.doOutput = true
+        conn.readTimeout = 120_000
+        conn.setFixedLengthStreamingMode(bytes.size)
+        conn.outputStream.use { it.write(bytes) }
+        val body = readBody(conn)
+        if (conn.responseCode != 200) throw ApiException(conn.responseCode, "Upload failed (HTTP ${conn.responseCode}).")
+        return JSONObject(body).optLong("size", bytes.size.toLong())
     }
 
     /**
