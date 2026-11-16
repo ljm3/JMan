@@ -6,6 +6,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
+import android.media.ExifInterface
+import java.io.ByteArrayInputStream
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
@@ -148,6 +154,75 @@ class MainActivity : Activity() {
     private var lastPromptedVersionCode = 0L
     private var signedInOnce = false
     private var reorderRunning = false
+
+
+    // ------------------------------------------------------------ photo orientation (v1.19)
+    // The bucket stores phone photos exactly as captured, EXIF tag and
+    // all. Browsers honor the EXIF orientation tag automatically;
+    // BitmapFactory does not, so before v1.19 the app showed
+    // EXIF-rotated photos sideways (Luddy's photo 002, from 1985).
+    // These helpers read the tag with the framework ExifInterface and
+    // bake it into the pixels wherever the app decodes a photo.
+
+    /** EXIF orientation of stored image bytes; 0 when absent/unreadable. */
+    private fun exifOrientationOf(bytes: ByteArray): Int {
+        return try {
+            ExifInterface(ByteArrayInputStream(bytes))
+                .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        } catch (e: Exception) { 0 }
+    }
+
+    /** Returns bmp transformed per the EXIF orientation value (a new
+     *  bitmap when a transform applies; bmp itself for 0/1/undefined). */
+    private fun applyExifOrientation(bmp: Bitmap, orientation: Int): Bitmap {
+        val m = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> { m.postRotate(90f); m.postScale(-1f, 1f) }
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> { m.postRotate(270f); m.postScale(-1f, 1f) }
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            else -> return bmp
+        }
+        val out = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        if (out !== bmp) bmp.recycle()
+        return out
+    }
+
+    /** Decodes image bytes and bakes any EXIF orientation into the pixels. */
+    private fun decodeOriented(bytes: ByteArray, sampleSize: Int): Bitmap? {
+        val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        val raw = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+        return applyExifOrientation(raw, exifOrientationOf(bytes))
+    }
+
+    private fun rotateBitmap(bmp: Bitmap, degrees: Float): Bitmap {
+        val m = Matrix(); m.postRotate(degrees)
+        val out = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        if (out !== bmp) bmp.recycle()
+        return out
+    }
+
+    private fun flipBitmap(bmp: Bitmap, horizontal: Boolean): Bitmap {
+        val m = Matrix()
+        if (horizontal) m.postScale(-1f, 1f) else m.postScale(1f, -1f)
+        val out = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        if (out !== bmp) bmp.recycle()
+        return out
+    }
+
+    /** True image format from magic bytes (the bucket holds two JPEGs
+     *  wearing .png/.webp names, so the extension cannot be trusted). */
+    private fun imageFormatOf(bytes: ByteArray): String {
+        if (bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte()) return "jpeg"
+        if (bytes.size >= 4 && bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() &&
+            bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()) return "png"
+        if (bytes.size >= 3 && bytes[0] == 0x47.toByte() && bytes[1] == 0x49.toByte() &&
+            bytes[2] == 0x46.toByte()) return "gif"
+        return "jpeg"
+    }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
     private fun post(block: () -> Unit) { ui.post(block) }
@@ -461,7 +536,8 @@ class MainActivity : Activity() {
         renameBtn.setOnClickListener {
             if (currentType == "links") {
                 selectedLink()?.let { showRenameLinkDialog(it) }
-            } else showRename()
+            } else if (currentType == "photos") showEditPhoto()
+            else showRename()
         }
         moveLinkBtn.setOnClickListener {
             when {
@@ -679,7 +755,7 @@ class MainActivity : Activity() {
         moveLinkBtn.visibility = View.VISIBLE
         swipe.visibility = if (isLinks) View.GONE else View.VISIBLE
         linksRv.visibility = if (isLinks) View.VISIBLE else View.GONE
-        renameBtn.text = if (isLinks) "Rename Link" else "Rename ${kindName(currentType)}"
+        renameBtn.text = if (isLinks) "Rename Link" else if (currentType == "photos") "Edit Photo" else "Rename ${kindName(currentType)}"
         styleActionBtns()
         searchField.hint = if (isLinks) "Search links by name, address, or category…"
             else "Search ${currentType} by name…"
@@ -990,6 +1066,312 @@ class MainActivity : Activity() {
             .show()
     }
 
+    // ------------------------------------------------------------ edit photo (v1.19)
+    // Edit Photo replaces Rename Photo on the Photos tab (Luddy,
+    // Monday, November 16, 2026): one dialog holding Rename,
+    // Orientation (rotate / flip), and Crop. The editor starts from
+    // the EXIF-applied image, so a stored-sideways photo opens
+    // upright. Saving with changed pixels first parks the untouched
+    // original at inbox/originals/<filename>, then writes the
+    // re-encoded image (full resolution, JPEG quality 90, PNG kept
+    // PNG, no EXIF orientation tag) back under the SAME key, so the
+    // photo keeps its number, title, year, and place in the order;
+    // a title change then rides the ordinary rename route, exactly
+    // like the old Rename Photo. A title-only save never touches the
+    // pixels and makes no backup.
+
+    /** The crop surface: the photo fitted whole, a gold crop box over
+     *  it that can be dragged to move, dragged by a corner to resize,
+     *  or drawn fresh by dragging outside the box. Crop coordinates
+     *  are image fractions (0..1); an optional pixel aspect (w/h)
+     *  constrains resizes and fresh draws. */
+    inner class PhotoCropView : View(this@MainActivity) {
+        var bmp: Bitmap? = null
+        var cropL = 0f; var cropT = 0f; var cropR = 1f; var cropB = 1f
+        var aspect: Float? = null
+        private var mode = 0 // 0 idle, 1 move, 2 resize corner, 3 draw new
+        private var corner = -1 // 0 TL, 1 TR, 2 BR, 3 BL (the corner being dragged)
+        private var grabDX = 0f; private var grabDY = 0f
+        private var anchorX = 0f; private var anchorY = 0f
+        private val dimPaint = Paint().apply { color = Color.argb(150, 3, 6, 10) }
+        private val linePaint = Paint().apply { color = GOLD; style = Paint.Style.STROKE; strokeWidth = dp(2).toFloat() }
+        private val handlePaint = Paint().apply { color = GOLD; style = Paint.Style.FILL }
+
+        fun cropIsFull(): Boolean = cropL <= 0.001f && cropT <= 0.001f && cropR >= 0.999f && cropB >= 0.999f
+
+        fun resetCrop() { cropL = 0f; cropT = 0f; cropR = 1f; cropB = 1f; invalidate() }
+
+        /** Largest centered crop with the given pixel aspect (null = free). */
+        fun applyAspect(a: Float?) {
+            aspect = a
+            val b = bmp ?: return
+            if (a == null) { invalidate(); return }
+            var fw = 1f
+            var fh = fw * b.width / (a * b.height)
+            if (fh > 1f) { fh = 1f; fw = fh * a * b.height / b.width }
+            val cx = (cropL + cropR) / 2f
+            val cy = (cropT + cropB) / 2f
+            cropL = (cx - fw / 2f).coerceIn(0f, 1f - fw); cropR = cropL + fw
+            cropT = (cy - fh / 2f).coerceIn(0f, 1f - fh); cropB = cropT + fh
+            invalidate()
+        }
+
+        private fun imgRect(): RectF {
+            val b = bmp ?: return RectF(0f, 0f, width.toFloat(), height.toFloat())
+            val s = minOf(width.toFloat() / b.width, height.toFloat() / b.height)
+            val w = b.width * s
+            val h = b.height * s
+            return RectF((width - w) / 2f, (height - h) / 2f, (width + w) / 2f, (height + h) / 2f)
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            val b = bmp
+            var h = if (b != null && b.width > 0) w * b.height / b.width else w
+            h = h.coerceIn(dp(140), dp(520))
+            setMeasuredDimension(w, h)
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val b = bmp ?: return
+            val r = imgRect()
+            canvas.drawBitmap(b, null, r, null)
+            val cl = r.left + cropL * r.width()
+            val ct = r.top + cropT * r.height()
+            val cr = r.left + cropR * r.width()
+            val cb = r.top + cropB * r.height()
+            canvas.drawRect(r.left, r.top, r.right, ct, dimPaint)
+            canvas.drawRect(r.left, cb, r.right, r.bottom, dimPaint)
+            canvas.drawRect(r.left, ct, cl, cb, dimPaint)
+            canvas.drawRect(cr, ct, r.right, cb, dimPaint)
+            canvas.drawRect(cl, ct, cr, cb, linePaint)
+            val hs = dp(9).toFloat()
+            for ((hx, hy) in listOf(cl to ct, cr to ct, cr to cb, cl to cb))
+                canvas.drawRect(hx - hs / 2, hy - hs / 2, hx + hs / 2, hy + hs / 2, handlePaint)
+        }
+
+        private fun toFrac(ev: MotionEvent): Pair<Float, Float> {
+            val r = imgRect()
+            val fx = ((ev.x - r.left) / r.width()).coerceIn(0f, 1f)
+            val fy = ((ev.y - r.top) / r.height()).coerceIn(0f, 1f)
+            return fx to fy
+        }
+
+        override fun onTouchEvent(ev: MotionEvent): Boolean {
+            val b = bmp ?: return false
+            val r = imgRect()
+            val tolX = dp(30) / r.width(); val tolY = dp(30) / r.height()
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    val (fx, fy) = toFrac(ev)
+                    val corners = listOf(cropL to cropT, cropR to cropT, cropR to cropB, cropL to cropB)
+                    corner = corners.indexOfFirst { (cx, cy) -> kotlin.math.abs(fx - cx) <= tolX && kotlin.math.abs(fy - cy) <= tolY }
+                    when {
+                        corner >= 0 -> mode = 2
+                        fx in cropL..cropR && fy in cropT..cropB -> { mode = 1; grabDX = fx - cropL; grabDY = fy - cropT }
+                        else -> { mode = 3; anchorX = fx; anchorY = fy; cropL = fx; cropT = fy; cropR = fx; cropB = fy }
+                    }
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (mode == 0) return false
+                    val (fx, fy) = toFrac(ev)
+                    when (mode) {
+                        1 -> {
+                            val w = cropR - cropL
+                            val h = cropB - cropT
+                            cropL = (fx - grabDX).coerceIn(0f, 1f - w); cropR = cropL + w
+                            cropT = (fy - grabDY).coerceIn(0f, 1f - h); cropB = cropT + h
+                        }
+                        2, 3 -> {
+                            val ax = if (mode == 3) anchorX else when (corner) { 0, 3 -> cropR; else -> cropL }
+                            val ay = if (mode == 3) anchorY else when (corner) { 0, 1 -> cropB; else -> cropT }
+                            var nl = minOf(ax, fx)
+                            var nr = maxOf(ax, fx)
+                            var nt = minOf(ay, fy)
+                            var nb = maxOf(ay, fy)
+                            val a = aspect
+                            if (a != null) {
+                                var fh = (nr - nl) * b.width / (a * b.height)
+                                if (ay == nt) { nb = nt + fh; if (nb > 1f) { nb = 1f; fh = nb - nt; nr = nl + fh * a * b.height / b.width } }
+                                else { nt = nb - fh; if (nt < 0f) { nt = 0f; fh = nb - nt; nr = nl + fh * a * b.height / b.width } }
+                            }
+                            if (nr - nl >= 0.04f && nb - nt >= 0.04f) { cropL = nl; cropR = nr; cropT = nt; cropB = nb }
+                        }
+                    }
+                    invalidate()
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { mode = 0; corner = -1; return true }
+            }
+            return super.onTouchEvent(ev)
+        }
+    }
+
+    private fun showEditPhoto() {
+        val type = "photos"
+        val item = lists[type]?.firstOrNull { it.key == selectedKey } ?: return
+        val file = item.key.substringAfter('/')
+        val withYear = Regex("^(\\d+) - (.*) - (\\d{4})(\\.[^.]+)$").matchEntire(file)
+        val noYear = Regex("^(\\d+) - (.*?)(\\.[^.]+)$").matchEntire(file)
+        val num: String; val oldTitle: String; val year: String?; val ext: String
+        if (withYear != null) {
+            num = withYear.groupValues[1]; oldTitle = withYear.groupValues[2]
+            year = withYear.groupValues[3]; ext = withYear.groupValues[4]
+        } else if (noYear != null) {
+            num = noYear.groupValues[1]; oldTitle = noYear.groupValues[2]
+            year = null; ext = noYear.groupValues[3]
+        } else {
+            toast("This item's name can't be edited here.")
+            return
+        }
+        setStatus("Loading the photo…", type)
+        thread {
+            try {
+                val bytes = Api.fetchFileBytes(this, item.key)
+                val fmt = imageFormatOf(bytes)
+                val raw = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (raw == null) {
+                    post { setStatus("Edit failed: the photo could not be read.", type) }
+                    return@thread
+                }
+                val orientation = exifOrientationOf(bytes)
+                val hadExifRotation = orientation != 0 && orientation != 1 &&
+                    orientation != ExifInterface.ORIENTATION_UNDEFINED
+                val oriented = applyExifOrientation(raw, orientation)
+                post {
+                    setStatus("", type)
+                    buildEditPhotoDialog(item, bytes, oriented, fmt, hadExifRotation, num, oldTitle, year, ext)
+                }
+            } catch (e: Exception) {
+                Diag.record(this, "editPhoto load", e)
+                post { setStatus("Edit failed: ${e.message}", type) }
+            }
+        }
+    }
+
+    private fun buildEditPhotoDialog(item: MediaItem, origBytes: ByteArray, startBmp: Bitmap,
+                                     fmt: String, hadExifRotation: Boolean,
+                                     num: String, oldTitle: String, year: String?, ext: String) {
+        val type = "photos"
+        val isGif = fmt == "gif"
+        var workBmp = startBmp
+        var pixelsDirty = hadExifRotation && !isGif
+
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        col.addView(label("Rename Photo", 13f, SUB))
+        val titleInput = field("Title").apply { setText(oldTitle); setSelection(text.length) }
+        col.addView(titleInput)
+
+        var cropView: PhotoCropView? = null
+        if (isGif) {
+            col.addView(label("GIF photos can't be edited here — rename still works.", 13f, SUB))
+        } else {
+            val cv = PhotoCropView()
+            cv.bmp = workBmp
+            cropView = cv
+            col.addView(label("Orientation", 13f, SUB))
+            val orow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            fun obtn(text: String, onClick: () -> Unit): Button {
+                val b = darkButton(text)
+                b.setOnClickListener { onClick() }
+                orow.addView(b, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+                return b
+            }
+            obtn("⟲ Left") { workBmp = rotateBitmap(workBmp, -90f); pixelsDirty = true; cv.bmp = workBmp; cv.resetCrop(); cv.requestLayout(); cv.invalidate() }
+            obtn("⟳ Right") { workBmp = rotateBitmap(workBmp, 90f); pixelsDirty = true; cv.bmp = workBmp; cv.resetCrop(); cv.requestLayout(); cv.invalidate() }
+            obtn("Flip ↔") { workBmp = flipBitmap(workBmp, true); pixelsDirty = true; cv.bmp = workBmp; cv.invalidate() }
+            obtn("Flip ↕") { workBmp = flipBitmap(workBmp, false); pixelsDirty = true; cv.bmp = workBmp; cv.invalidate() }
+            col.addView(orow)
+            col.addView(label("Crop Photo — drag the box to move it, a corner to resize, or drag outside it to draw a new one.", 13f, SUB))
+            val arow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val aspectBtns = ArrayList<Button>()
+            fun abtn(text: String, a: Float?) {
+                val b = darkButton(text)
+                b.setOnClickListener {
+                    // "Original" follows the current bitmap (a rotate
+                    // swaps its aspect); the rest are fixed values.
+                    val useA = if (text == "Original") {
+                        val bb = cv.bmp; if (bb != null && bb.height > 0) bb.width.toFloat() / bb.height else null
+                    } else a
+                    cv.applyAspect(useA)
+                    for (x in aspectBtns) x.alpha = if (x === b) 1f else 0.55f
+                }
+                aspectBtns.add(b)
+                arow.addView(b, LinearLayout.LayoutParams(0, dp(38), 1f).apply { marginEnd = dp(6) })
+            }
+            abtn("Free", null)
+            abtn("Original", null)
+            abtn("Square", 1f)
+            abtn("4:3", 4f / 3f)
+            abtn("3:2", 3f / 2f)
+            abtn("16:9", 16f / 9f)
+            for (x in aspectBtns) x.alpha = 0.55f
+            aspectBtns[0].alpha = 1f
+            col.addView(arow)
+            col.addView(cv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            if (hadExifRotation) col.addView(label("This photo was stored sideways; it opens upright here, and saving bakes that in.", 12.5f, SUB))
+        }
+
+        val scroll = android.widget.ScrollView(this).apply { addView(col) }
+        AlertDialog.Builder(this)
+            .setTitle("Edit Photo")
+            .setView(scroll)
+            .setPositiveButton("Save") { _, _ ->
+                val newTitle = titleInput.text.toString().trim().replace('/', '-')
+                val titleChanged = newTitle.isNotEmpty() && newTitle != oldTitle
+                val cv = cropView
+                val cropFull = cv == null || cv.cropIsFull()
+                val doPixels = !isGif && (pixelsDirty || !cropFull)
+                if (!titleChanged && !doPixels) return@setPositiveButton
+                val srcBmp = workBmp
+                val cl = cv?.cropL ?: 0f; val ct = cv?.cropT ?: 0f
+                val cr = cv?.cropR ?: 1f; val cb = cv?.cropB ?: 1f
+                setStatus("Saving the photo…", type)
+                thread {
+                    try {
+                        if (doPixels) {
+                            // Park the untouched original first, then
+                            // overwrite the same key with the edit.
+                            Api.putBytes(this, "inbox/originals/" + item.key.substringAfter('/'), origBytes)
+                            var outBmp = srcBmp
+                            if (!cropFull) {
+                                val x = (cl * srcBmp.width).toInt().coerceIn(0, srcBmp.width - 1)
+                                val y = (ct * srcBmp.height).toInt().coerceIn(0, srcBmp.height - 1)
+                                val w = ((cr - cl) * srcBmp.width).toInt().coerceIn(1, srcBmp.width - x)
+                                val h = ((cb - ct) * srcBmp.height).toInt().coerceIn(1, srcBmp.height - y)
+                                outBmp = Bitmap.createBitmap(srcBmp, x, y, w, h)
+                            }
+                            val baos = ByteArrayOutputStream()
+                            if (fmt == "png") outBmp.compress(Bitmap.CompressFormat.PNG, 100, baos)
+                            else outBmp.compress(Bitmap.CompressFormat.JPEG, 90, baos)
+                            Api.putBytes(this, item.key, baos.toByteArray())
+                            adapter.evict(item.key)
+                        }
+                        if (titleChanged) {
+                            val newFile = if (year != null) "$num - $newTitle - $year$ext" else "$num - $newTitle$ext"
+                            Api.rename(this, item.key, "$type/$newFile")
+                        }
+                        post {
+                            selectedKey = null
+                            toast("Photo saved.")
+                            refresh(type, keepOrder = false)
+                        }
+                    } catch (e: Exception) {
+                        Diag.record(this, "editPhoto save", e)
+                        post { setStatus("Save failed: ${e.message}", type) }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun showRename() {
         val type = currentType
         val item = lists[type]?.firstOrNull { it.key == selectedKey } ?: return
@@ -1165,6 +1547,11 @@ class MainActivity : Activity() {
             return Holder(row)
         }
 
+        /** Drops one cached thumbnail (after an Edit Photo save replaced the file). */
+        fun evict(key: String) {
+            synchronized(cache) { cache.remove(key) }
+        }
+
         fun refreshPositions() {
             // Position numbers are part of the sub-line; simplest correct
             // refresh is a full rebind of visible rows.
@@ -1235,8 +1622,7 @@ class MainActivity : Activity() {
             thumbPool.execute {
                 try {
                     val bytes = Api.fetchFileBytes(this@MainActivity, key)
-                    val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
-                    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                    val bmp = decodeOriented(bytes, 4)
                     if (bmp != null) {
                         synchronized(cache) { cache[key] = bmp }
                         post { notifyDataSetChanged() }
@@ -1753,7 +2139,7 @@ class MainActivity : Activity() {
         dbxThumbPool.execute {
             try {
                 val bytes = Api.dropboxThumb(this, path)
-                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bmp = decodeOriented(bytes, 1)
                 if (bmp != null) {
                     synchronized(dbxThumbCache) { dbxThumbCache[path] = bmp }
                     post { onLoaded() }
