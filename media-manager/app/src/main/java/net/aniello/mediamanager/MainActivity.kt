@@ -14,17 +14,26 @@ import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextUtils
+import android.text.TextWatcher
 import android.util.Base64
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.BaseAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
@@ -46,13 +55,15 @@ import kotlin.concurrent.thread
 /**
  * LJM3 Media Manager — the phone companion to the ljm3.me media page.
  * Manages the ljm3-multimedia bucket through the dashboard-authenticated
- * media-admin API: browse photos and videos in their live order,
+ * media-admin API: browse photos, videos, and audio in their live order,
  * drag to reorder (the server renames the NNN key prefixes, so the
  * bucket stays the catalog), delete, and add new items from the phone,
  * a web link (Dropbox included), a network share (WebDAV relay), or
  * the guided export paths for Amazon Photos, Facebook and Instagram.
- * Self-update rides ljm3.me behind the sign-in first and
- * software.aniello.net second, like the other estate apps.
+ * A fourth tab manages the links catalog (add, rename, move between
+ * categories / subcategories, reorder, delete). Self-update rides
+ * ljm3.me behind the sign-in first and software.aniello.net second,
+ * like the other estate apps.
  */
 class MainActivity : Activity() {
 
@@ -63,6 +74,7 @@ class MainActivity : Activity() {
         private const val APK_BASE_SOFTWARE = "https://software.aniello.net/apps/"
         private const val REQ_GALLERY = 1001
         private const val REQ_FILES = 1002
+        private const val NEW_CATEGORY_LABEL = "New category…"
         val BG: Int = Color.rgb(11, 15, 22)
         val CARD: Int = Color.rgb(20, 33, 47)
         val GOLD: Int = Color.rgb(201, 168, 106)
@@ -81,12 +93,57 @@ class MainActivity : Activity() {
     private lateinit var optionsPanel: LinearLayout
     private lateinit var addPhotoBtn: Button
     private lateinit var addVideoBtn: Button
+    private lateinit var addAudioBtn: Button
+    private lateinit var addLinkBtn: Button
     private lateinit var renameBtn: Button
+    private lateinit var moveLinkBtn: Button
+    private lateinit var searchField: EditText
     private var selectedKey: String? = null
+    // Multi-select MOVE state (v1.17): per media type, the KEYS of the
+    // items whose row checkbox is ticked. Deliberately independent of
+    // selectedKey (the single row-tap selection Rename acts on): ticking
+    // checkboxes never changes the Rename selection, and tapping a row
+    // never changes this set. The move itself is local only — it
+    // reorders lists[type] and marks the tab dirty until Save Order.
+    private val moveSelection = HashMap<String, MutableSet<String>>()
+    // Per-tab search text, kept in memory while the app runs (v1.11).
+    // Filtering only ever narrows what is DISPLAYED — the underlying
+    // lists and their order are never touched by a search.
+    private val searchQueries = HashMap<String, String>()
     private val statusByType = HashMap<String, String>()
     private lateinit var saveOrderBtn: Button
     private lateinit var tabPhotos: Button
     private lateinit var tabVideos: Button
+    private lateinit var tabAudio: Button
+    private lateinit var tabLinks: Button
+    private lateinit var linksAdapter: LinksAdapter
+    private lateinit var linksRv: RecyclerView
+    private lateinit var linksTouchHelper: ItemTouchHelper
+    // Links catalog state. There is NO predefined category list: the
+    // catalog starts empty, and categories / subcategories exist only
+    // because links were placed under them.
+    private var linksLoaded = false
+    private var linksCategories: List<String> = emptyList()
+    private val linksItems = mutableListOf<Api.LinkItem>()
+    // Links selection + unsaved local group orders (v1.11): tapping a
+    // row selects it for the Rename / Move buttons, and ▲/▼ moves only
+    // change the local order until Save Order posts each dirty group.
+    private var selectedLinkId: String? = null
+    // Multi-select MOVE state for links (v1.17): the ids whose row
+    // checkbox is ticked, independent of selectedLinkId (the single
+    // row-tap selection). While this set is non-empty the Move button
+    // acts on the whole set; with it empty, Move Link keeps its exact
+    // single-selection behavior. Bulk link moves are server-side
+    // immediate (Api.linksMove per link) — no Save Order.
+    private val linkMoveSelection = LinkedHashSet<String>()
+    private val linksDirtyGroups = HashSet<Pair<String, String>>()
+    // Set by the Links drag helper whenever a drag step actually
+    // swapped two links; clearView turns it into the status line and
+    // the lit Save Order button once the drag ends (v1.12).
+    private var linksDragMoved = false
+    private val faviconCache = HashMap<String, Bitmap>()
+    private val faviconLoading = HashSet<String>()
+    private val faviconPool = Executors.newFixedThreadPool(2)
     private var lastUpdateCheckMs = 0L
     private var lastPromptedVersionCode = 0L
     private var signedInOnce = false
@@ -145,6 +202,54 @@ class MainActivity : Activity() {
         textSize = 14f
     }
 
+    // v1.13/v1.14: the Links tab shows FOUR action buttons in the
+    // shared row (Add Link / Rename Link / Move Link / Save Order)
+    // where the media tabs showed three, and at the stock 14sp size
+    // with default button padding and min-width the labels wrapped
+    // to two lines - so Links went compact: single line, 11.5sp,
+    // tight horizontal padding, no min-width floor, and equal
+    // layout weights (1/1/1/1 - Save Order no wider than the rest),
+    // so every label fits on one line. v1.14 captured the stock
+    // values and restored them on the media tabs (the restore in
+    // PIXELS: feeding getTextSize()'s px back through the sp-based
+    // setter was the v1.13 leak that blew the media buttons up by
+    // the display's scaled-density factor).
+    // v1.18 (Luddy, Sunday, November 15, 2026): "Need same text and
+    // sizing as on links option - for buttons." The compact Links
+    // styling now applies to the shared action row on EVERY tab;
+    // the v1.14 capture/restore switching is retired, and switching
+    // tabs never changes the buttons' size. The values are applied
+    // exactly as the Links path always applied them: 11.5sp through
+    // the textSize property (COMPLEX_UNIT_SP - never px through the
+    // sp setter), horizontal padding dp(4), min-width floors 0,
+    // single line, weights 1/1/1/1.
+    private fun actionRowBtns() = listOf(addLinkBtn, renameBtn, moveLinkBtn, saveOrderBtn)
+
+    private fun styleActionBtnCompact(b: Button) {
+        b.maxLines = 1
+        b.isSingleLine = true
+        b.textSize = 11.5f
+        b.setPadding(dp(4), b.paddingTop, dp(4), b.paddingBottom)
+        b.minWidth = 0
+        b.minimumWidth = 0
+    }
+
+    private fun setActionBtnWeight(b: Button, w: Float) {
+        if (w < 0f) return
+        val lp = b.layoutParams as? LinearLayout.LayoutParams ?: return
+        if (lp.weight != w) {
+            lp.weight = w
+            b.layoutParams = lp
+        }
+    }
+
+    private fun styleActionBtns() {
+        for (b in actionRowBtns()) {
+            styleActionBtnCompact(b)
+            setActionBtnWeight(b, 1f)
+        }
+    }
+
     private fun field(hint: String, inputType: Int? = null): EditText = EditText(this).apply {
         this.hint = hint
         setTextColor(TEXT)
@@ -167,6 +272,20 @@ class MainActivity : Activity() {
         this.text = text
         textSize = size
         setTextColor(color)
+    }
+
+    /** Display kind for a media type: "Photo" / "Video" / "Audio". */
+    private fun kindName(type: String): String = when (type) {
+        "photos" -> "Photo"
+        "videos" -> "Video"
+        else -> "Audio"
+    }
+
+    /** Lowercase kind for sentences: "photo" / "video" / "audio file". */
+    private fun kindLower(type: String): String = when (type) {
+        "photos" -> "photo"
+        "videos" -> "video"
+        else -> "audio file"
     }
 
     private fun fmtSize(bytes: Long): String {
@@ -195,7 +314,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(14), 0, dp(4))
         })
-        col.addView(label("Manage the photos and videos on your ljm3.me page. Sign in with your dashboard username and password.", 13.5f, SUB).apply {
+        col.addView(label("Manage the photos, videos, audio, and links on your ljm3.me page. Sign in with your dashboard username and password.", 13.5f, SUB).apply {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(18))
         })
@@ -295,7 +414,7 @@ class MainActivity : Activity() {
         val refreshBtn = darkButton("Refresh").apply { textSize = 13f }
         refreshBtn.setOnClickListener {
             optionsPanel.visibility = View.GONE
-            refresh(currentType, keepOrder = false)
+            if (currentType == "links") refreshLinks() else refresh(currentType, keepOrder = false)
         }
         optionsPanel.addView(refreshBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)).apply { bottomMargin = dp(6) })
         val updateBtn = darkButton("Check For Updates").apply { textSize = 13f }
@@ -310,12 +429,18 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(14), dp(4), dp(14), dp(4))
         }
-        tabPhotos = darkButton("Photos")
-        tabVideos = darkButton("Videos")
+        tabPhotos = darkButton("Photos").apply { textSize = 13f }
+        tabVideos = darkButton("Videos").apply { textSize = 13f }
+        tabAudio = darkButton("Audio").apply { textSize = 13f }
+        tabLinks = darkButton("Links").apply { textSize = 13f }
         tabPhotos.setOnClickListener { switchTab("photos") }
         tabVideos.setOnClickListener { switchTab("videos") }
+        tabAudio.setOnClickListener { switchTab("audio") }
+        tabLinks.setOnClickListener { switchTab("links") }
         tabs.addView(tabPhotos, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
-        tabs.addView(tabVideos, LinearLayout.LayoutParams(0, dp(42), 1f))
+        tabs.addView(tabVideos, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        tabs.addView(tabAudio, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        tabs.addView(tabLinks, LinearLayout.LayoutParams(0, dp(42), 1f))
         col.addView(tabs)
 
         val actions = LinearLayout(this).apply {
@@ -324,17 +449,60 @@ class MainActivity : Activity() {
         }
         addPhotoBtn = darkButton("Add Photo")
         addVideoBtn = darkButton("Add Video")
+        addAudioBtn = darkButton("Add Audio")
+        addLinkBtn = goldButton("Add Link")
         renameBtn = darkButton("Rename Photo")
+        moveLinkBtn = darkButton("Move Link")
         saveOrderBtn = goldButton("Save Order")
         addPhotoBtn.setOnClickListener { showSourceSheet("photos") }
         addVideoBtn.setOnClickListener { showSourceSheet("videos") }
-        renameBtn.setOnClickListener { showRename() }
-        saveOrderBtn.setOnClickListener { saveOrder() }
+        addAudioBtn.setOnClickListener { showSourceSheet("audio") }
+        addLinkBtn.setOnClickListener { showAddLinkDialog() }
+        renameBtn.setOnClickListener {
+            if (currentType == "links") {
+                selectedLink()?.let { showRenameLinkDialog(it) }
+            } else showRename()
+        }
+        moveLinkBtn.setOnClickListener {
+            when {
+                // Links, checkboxes ticked: bulk move of the whole set.
+                currentType == "links" && linkMoveSelection.isNotEmpty() -> showBulkMoveLinksDialog()
+                // Links, no checkboxes: today's single-selection move.
+                currentType == "links" -> selectedLink()?.let { showMoveLinkDialog(it) }
+                // Media tabs: move the checkbox-selected block locally.
+                else -> showMoveSelectedMediaDialog()
+            }
+        }
+        saveOrderBtn.setOnClickListener { if (currentType == "links") saveLinksOrder() else saveOrder() }
         actions.addView(addPhotoBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
         actions.addView(addVideoBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        actions.addView(addAudioBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        actions.addView(addLinkBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
         actions.addView(renameBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        actions.addView(moveLinkBtn, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
         actions.addView(saveOrderBtn, LinearLayout.LayoutParams(0, dp(42), 1.2f))
         col.addView(actions)
+
+        // Search (v1.11): one field above the list on every tab, in
+        // the Update page's format. Each tab keeps its own text; the
+        // watcher only stores the text and re-filters the display.
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(14), 0, dp(14), dp(4))
+        }
+        searchField = field("Search")
+        searchField.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) { }
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { }
+            override fun afterTextChanged(s: Editable?) {
+                val q = s?.toString() ?: ""
+                if (searchQueries[currentType] == q) return
+                searchQueries[currentType] = q
+                if (currentType == "links") renderLinks() else adapter.notifyDataSetChanged()
+            }
+        })
+        searchRow.addView(searchField, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        col.addView(searchRow)
 
         adapter = MediaAdapter()
         val rv = RecyclerView(this).apply {
@@ -347,11 +515,21 @@ class MainActivity : Activity() {
                 val from = vh.bindingAdapterPosition
                 val to = target.bindingAdapterPosition
                 val items = lists[currentType] ?: return false
-                if (from < 0 || to < 0 || from >= items.size || to >= items.size) return false
-                Collections.swap(items, from, to)
+                // Adapter positions are positions in the (possibly
+                // search-filtered) display; translate them to full-list
+                // indices so a drag swaps the right two items in the
+                // underlying order (v1.11).
+                val vis = visibleMediaItems()
+                if (from < 0 || to < 0 || from >= vis.size || to >= vis.size) return false
+                val fi = vis[from].first
+                val ti = vis[to].first
+                if (fi !in items.indices || ti !in items.indices) return false
+                if (fi != ti) {
+                    Collections.swap(items, fi, ti)
+                    dirty[currentType] = true
+                    updateSaveOrder()
+                }
                 adapter.notifyItemMoved(from, to)
-                dirty[currentType] = true
-                updateSaveOrder()
                 return true
             }
             override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
@@ -370,6 +548,70 @@ class MainActivity : Activity() {
         }
         col.addView(swipe, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
+        // The Links tab's list (v1.12): a RecyclerView like the media
+        // tabs', shown instead of the media RecyclerView while Links
+        // is active. Group headers are plain rows in the same list;
+        // link rows carry a ≡ drag handle at the left edge, exactly
+        // like the Update page. Dragging is confined to the dragged
+        // link's own category/subcategory group (a move across a
+        // header or into another group is refused — changing groups
+        // stays the Move Link dialog's job), and it is disabled while
+        // a Links search is filtering the display.
+        linksAdapter = LinksAdapter()
+        linksRv = RecyclerView(this).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            this.adapter = this@MainActivity.linksAdapter
+            visibility = View.GONE
+            setPadding(dp(14), dp(4), dp(14), dp(10))
+            clipToPadding = false
+        }
+        linksTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
+            override fun getMovementFlags(rv: RecyclerView, vh: RecyclerView.ViewHolder): Int {
+                val q = (searchQueries["links"] ?: "").trim()
+                val draggable = vh is LinksAdapter.EntryHolder && q.isEmpty()
+                val dragFlags = if (draggable) ItemTouchHelper.UP or ItemTouchHelper.DOWN else 0
+                return makeMovementFlags(dragFlags, 0)
+            }
+            override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                val from = vh.bindingAdapterPosition
+                val to = target.bindingAdapterPosition
+                val rows = linksAdapter.rows
+                if (from !in rows.indices || to !in rows.indices) return false
+                val src = rows[from] as? LinkRow.Entry ?: return false
+                val dst = rows[to] as? LinkRow.Entry ?: return false
+                // Group constraint: the dragged link may only trade
+                // places with a link in its own group — never across
+                // a group header or into another group.
+                if (src.item.cat != dst.item.cat || src.item.sub != dst.item.sub) return false
+                swapLinksForDrag(src.item, dst.item)
+                // Keep the display rows in step in place (a rebuild
+                // mid-drag would fight the helper's bookkeeping); the
+                // two entries trade their display places along with
+                // their catalog places.
+                rows[from] = dst.copy(displayIdx = src.displayIdx)
+                rows[to] = src.copy(displayIdx = dst.displayIdx)
+                linksAdapter.notifyItemMoved(from, to)
+                return true
+            }
+            override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
+                super.clearView(rv, vh)
+                // A full rebind settles the "N of M" sub-lines, and a
+                // drag that changed anything leaves the same trail as
+                // an ▲/▼ move: group dirty, Save Order lit, status set.
+                linksAdapter.notifyDataSetChanged()
+                if (linksDragMoved) {
+                    linksDragMoved = false
+                    updateSaveOrder()
+                    setStatus("Order changed — tap Save Order to save it.", "links")
+                }
+            }
+            override fun onSwiped(vh: RecyclerView.ViewHolder, dir: Int) { }
+            override fun isLongPressDragEnabled(): Boolean = false
+        })
+        linksTouchHelper.attachToRecyclerView(linksRv)
+        linksAdapter.touchHelper = linksTouchHelper
+        col.addView(linksRv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
         val footer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(14), dp(6), dp(14), dp(12))
@@ -383,15 +625,37 @@ class MainActivity : Activity() {
         updateSaveOrder()
         if (lists["photos"] == null) refresh("photos", keepOrder = false)
         if (lists["videos"] == null) refresh("videos", keepOrder = false)
+        if (lists["audio"] == null) refresh("audio", keepOrder = false)
     }
 
     private fun switchTab(type: String) {
         if (currentType == type) return
         currentType = type
         selectedKey = null
+        selectedLinkId = null
+        // The search field shows this tab's own remembered text; the
+        // watcher stores it back under the new tab and re-filters.
+        searchField.setText(searchQueries[type] ?: "")
         updateTabs()
         adapter.notifyDataSetChanged()
         updateSaveOrder()
+        if (type == "links") {
+            if (linksLoaded) renderLinks() else refreshLinks()
+        }
+    }
+
+    /**
+     * The media rows currently on display for the current tab, as
+     * (full-list index, item) pairs with the tab's search applied
+     * (title contains, case-insensitive). With no search text this is
+     * the whole list in order. Filtering never mutates the list.
+     */
+    private fun visibleMediaItems(): List<Pair<Int, MediaItem>> {
+        val items = lists[currentType] ?: return emptyList()
+        val q = (searchQueries[currentType] ?: "").trim().lowercase()
+        val indexed = items.mapIndexed { i, it -> i to it }
+        if (q.isEmpty()) return indexed
+        return indexed.filter { it.second.title.lowercase().contains(q) }
     }
 
     private fun updateTabs() {
@@ -400,24 +664,79 @@ class MainActivity : Activity() {
         tabPhotos.setTextColor(if (currentType == "photos") Color.rgb(11, 15, 22) else TEXT)
         tabVideos.background = roundedBg(if (currentType == "videos") on else off)
         tabVideos.setTextColor(if (currentType == "videos") Color.rgb(11, 15, 22) else TEXT)
+        tabAudio.background = roundedBg(if (currentType == "audio") on else off)
+        tabAudio.setTextColor(if (currentType == "audio") Color.rgb(11, 15, 22) else TEXT)
+        tabLinks.background = roundedBg(if (currentType == "links") on else off)
+        tabLinks.setTextColor(if (currentType == "links") Color.rgb(11, 15, 22) else TEXT)
+        val isLinks = currentType == "links"
         addPhotoBtn.visibility = if (currentType == "photos") View.VISIBLE else View.GONE
         addVideoBtn.visibility = if (currentType == "videos") View.VISIBLE else View.GONE
-        renameBtn.text = if (currentType == "photos") "Rename Photo" else "Rename Video"
+        addAudioBtn.visibility = if (currentType == "audio") View.VISIBLE else View.GONE
+        addLinkBtn.visibility = if (isLinks) View.VISIBLE else View.GONE
+        // v1.17: the Move button now shows on EVERY tab — on media
+        // tabs it moves the checkbox-selected block, on Links it moves
+        // the checkbox set (or the single selection, as before).
+        moveLinkBtn.visibility = View.VISIBLE
+        swipe.visibility = if (isLinks) View.GONE else View.VISIBLE
+        linksRv.visibility = if (isLinks) View.VISIBLE else View.GONE
+        renameBtn.text = if (isLinks) "Rename Link" else "Rename ${kindName(currentType)}"
+        styleActionBtns()
+        searchField.hint = if (isLinks) "Search links by name, address, or category…"
+            else "Search ${currentType} by name…"
         updateRename()
         showStatusForCurrentTab()
     }
 
     private fun updateRename() {
-        val has = selectedKey != null
+        // Rename acts on the single selected row and stays disabled
+        // until there is one — the Update page's rule. The Move
+        // button's state is its own rule now (v1.17): see
+        // updateMoveButton.
+        val has = if (currentType == "links") selectedLinkId != null else selectedKey != null
         renameBtn.isEnabled = has
         renameBtn.alpha = if (has) 1f else 0.45f
+        updateMoveButton()
+    }
+
+    /**
+     * The Move button's label and enabled state (v1.17), refreshed
+     * whenever a checkbox set changes, a selection changes, or the
+     * tab switches (updateRename and updateTabs both funnel here).
+     * Media tabs: "Move Selected (N)", enabled only while N >= 1 for
+     * the CURRENT tab's set (each tab keeps its own set). Links tab:
+     * while any link checkbox is ticked, "Move Selected (N)" acting
+     * on the set; with none ticked, "Move Link" with the exact old
+     * single-selection enable rule.
+     */
+    private fun updateMoveButton() {
+        if (!::moveLinkBtn.isInitialized) return
+        if (currentType == "links") {
+            val n = linkMoveSelection.size
+            if (n >= 1) {
+                moveLinkBtn.text = "Move Selected ($n)"
+                moveLinkBtn.isEnabled = true
+                moveLinkBtn.alpha = 1f
+            } else {
+                moveLinkBtn.text = "Move Link"
+                val has = selectedLinkId != null
+                moveLinkBtn.isEnabled = has
+                moveLinkBtn.alpha = if (has) 1f else 0.45f
+            }
+        } else {
+            val n = moveSelection[currentType]?.size ?: 0
+            moveLinkBtn.text = "Move Selected ($n)"
+            moveLinkBtn.isEnabled = n >= 1
+            moveLinkBtn.alpha = if (n >= 1) 1f else 0.45f
+        }
     }
 
     private fun updateSaveOrder() {
-        val d = dirty[currentType] == true
+        val d = if (currentType == "links") linksDirtyGroups.isNotEmpty() else dirty[currentType] == true
         saveOrderBtn.isEnabled = d
         saveOrderBtn.alpha = if (d) 1f else 0.45f
     }
+
+    private fun selectedLink(): Api.LinkItem? = linksItems.firstOrNull { it.id == selectedLinkId }
 
     private fun refresh(type: String, keepOrder: Boolean) {
         if (type == currentType) swipe.isRefreshing = true
@@ -429,6 +748,11 @@ class MainActivity : Activity() {
                     if (!(keepOrder && dirty[type] == true)) {
                         lists[type] = items.toMutableList()
                         dirty[type] = false
+                        // A reload replaces the list wholesale (v1.17):
+                        // drop move-checkbox keys that no longer exist
+                        // so a stale key can never inflate the count.
+                        moveSelection[type]?.retainAll(items.map { it.key }.toSet())
+                        if (type == currentType) updateMoveButton()
                     }
                     // The finished status is recorded for the tab whether
                     // or not it is on screen (Luddy, 2026-11-14): both tabs
@@ -482,8 +806,75 @@ class MainActivity : Activity() {
     private fun saveOrder() {
         if (reorderRunning) return
         val type = currentType
-        val items = lists[type]?.toList() ?: return
-        if (items.isEmpty()) return
+        val localItems = lists[type]?.toList() ?: return
+        if (localItems.isEmpty()) return
+        // Stale-list hardening (v1.17, parity with the Update page's
+        // reconcileOrderItems): the library may have changed since
+        // this tab's list loaded, so re-fetch it on a background
+        // thread BEFORE planning any rename. The reconciled list —
+        // local order kept for items that still exist (using the
+        // FRESH item objects), removed items dropped, added items
+        // appended at the end in server order — replaces lists[type]
+        // and becomes the plan's input. If the fetch fails, the local
+        // list is planned unchanged, exactly as before. Setting
+        // reorderRunning here also blocks drags during the fetch, so
+        // the local order cannot shift under the reconcile.
+        reorderRunning = true
+        if (::swipe.isInitialized) swipe.isEnabled = false
+        thread {
+            val fresh = try { Api.list(this, type) } catch (e: Exception) { null }
+            post {
+                var note = ""
+                var items = localItems
+                if (fresh != null) {
+                    val freshByKey = fresh.associateBy { it.key }
+                    val localKeys = localItems.map { it.key }.toSet()
+                    val kept = localItems.mapNotNull { freshByKey[it.key] }
+                    val addedItems = fresh.filter { it.key !in localKeys }
+                    val added = addedItems.size
+                    val dropped = localItems.size - kept.size
+                    val reconciled = kept + addedItems
+                    lists[type] = reconciled.toMutableList()
+                    moveSelection[type]?.retainAll(reconciled.map { it.key }.toSet())
+                    if (type == currentType) {
+                        adapter.notifyDataSetChanged()
+                        updateMoveButton()
+                    }
+                    if (added > 0 || dropped > 0) {
+                        val clauses = ArrayList<String>()
+                        if (added > 0) clauses.add("$added item${if (added == 1) "" else "s"} added at the end")
+                        if (dropped > 0) clauses.add("$dropped item${if (dropped == 1) "" else "s"} removed")
+                        note = " The library had changed since this list loaded \u2014 " +
+                            clauses.joinToString(" / ") +
+                            " \u2014 so the order was matched to the current library first."
+                    }
+                    items = reconciled
+                }
+                if (items.isEmpty()) {
+                    // Everything local was removed server-side and
+                    // nothing replaced it: nothing left to save.
+                    reorderRunning = false
+                    swipe.isEnabled = true
+                    dirty[type] = false
+                    updateSaveOrder()
+                    setStatus("That is already the saved order." + note, type)
+                    return@post
+                }
+                executeSaveOrder(type, items, note)
+            }
+        }
+    }
+
+    /**
+     * The original saveOrder body (planning + step-wise execution),
+     * unchanged except for its inputs: [items] is the (possibly
+     * reconciled) list to plan from, and [reconcileNote] is appended
+     * to the success status when the reconcile changed anything.
+     * Called with reorderRunning already set by saveOrder; every exit
+     * path here clears it, as the old synchronous entry did by
+     * setting it only once planning succeeded.
+     */
+    private fun executeSaveOrder(type: String, items: List<MediaItem>, reconcileNote: String) {
         val targets = items.mapIndexed { i, it -> finalKeyFor(type, i, it.key) }
 
         // Pure simulation: build the full ordered step list first.
@@ -491,9 +882,11 @@ class MainActivity : Activity() {
         val occupied = items.map { it.key }.toMutableSet()
         val pending = (0 until items.size).filter { cur[it] != targets[it] }.toMutableSet()
         if (pending.isEmpty()) {
+            reorderRunning = false
+            if (::swipe.isInitialized) swipe.isEnabled = true
             dirty[type] = false
             updateSaveOrder()
-            setStatus("That is already the saved order.", type)
+            setStatus("That is already the saved order." + reconcileNote, type)
             return
         }
         val stamp = java.text.SimpleDateFormat("yyyyMMddHHmmss", java.util.Locale.US).format(java.util.Date())
@@ -565,7 +958,7 @@ class MainActivity : Activity() {
                 swipe.isEnabled = true
                 if (err == null) {
                     dirty[type] = false
-                    setStatus("Order saved — the page now shows this order.", type)
+                    setStatus("Order saved — the page now shows this order." + reconcileNote, type)
                     toast("Order saved.")
                 } else {
                     Diag.record(this, "saveOrder stepwise", err)
@@ -579,7 +972,7 @@ class MainActivity : Activity() {
 
     private fun confirmDelete(item: MediaItem) {
         AlertDialog.Builder(this)
-            .setTitle("Delete this ${if (currentType == "photos") "photo" else "video"}?")
+            .setTitle("Delete this ${kindLower(currentType)}?")
             .setMessage("“${item.title}” will be removed from the bucket and from the page. This cannot be undone from the app.")
             .setPositiveButton("Delete") { _, _ ->
                 setStatus("Deleting…")
@@ -600,7 +993,7 @@ class MainActivity : Activity() {
     private fun showRename() {
         val type = currentType
         val item = lists[type]?.firstOrNull { it.key == selectedKey } ?: return
-        val kind = if (type == "photos") "Photo" else "Video"
+        val kind = kindName(type)
         val file = item.key.substringAfter('/')
         val withYear = Regex("^(\\d+) - (.*) - (\\d{4})(\\.[^.]+)$").matchEntire(file)
         val noYear = Regex("^(\\d+) - (.*?)(\\.[^.]+)$").matchEntire(file)
@@ -644,6 +1037,72 @@ class MainActivity : Activity() {
             .show()
     }
 
+    /**
+     * Multi-select media move (v1.17): pick where the checkbox-selected
+     * block goes. The dialog lists the UNSELECTED items of the current
+     * tab in full-list order, each with its 1-based full-list position
+     * — tapping one inserts the block immediately BEFORE it — plus a
+     * final "Move to the end" row. (The list is the adapter's filtered
+     * display's opposite: it is built from lists[type] itself, so a
+     * search filter on the tab never changes the positions shown or
+     * the order operated on.) The splice is LOCAL only: the selected
+     * items are removed keeping their relative order and inserted as
+     * one block; the tab is marked dirty and nothing reaches the
+     * server until Save Order.
+     */
+    private fun showMoveSelectedMediaDialog() {
+        val type = currentType
+        val items = lists[type] ?: return
+        val selectedKeys = moveSelection[type] ?: return
+        if (selectedKeys.isEmpty()) return
+        val block = items.filter { it.key in selectedKeys }
+        if (block.isEmpty()) {
+            selectedKeys.clear()
+            updateMoveButton()
+            return
+        }
+        val unselected = items.withIndex().filter { it.value.key !in selectedKeys }
+        val labels = ArrayList<String>()
+        for ((fullIdx, item) in unselected) labels.add("${fullIdx + 1}. ${item.title}")
+        labels.add("Move to the end")
+        AlertDialog.Builder(this)
+            .setTitle("Move ${block.size} selected files")
+            .setItems(labels.toTypedArray()) { _, which ->
+                val rest = items.filter { it.key !in selectedKeys }
+                val insertAt = if (which >= unselected.size) {
+                    rest.size
+                } else {
+                    val targetKey = unselected[which].value.key
+                    rest.indexOfFirst { it.key == targetKey }
+                }
+                if (insertAt >= 0) {
+                    val newList = rest.toMutableList()
+                    newList.addAll(insertAt, block)
+                    val n = block.size
+                    selectedKeys.clear()
+                    if (newList.map { it.key } == items.map { it.key }) {
+                        // Already exactly there (e.g. every item
+                        // selected and "Move to the end" tapped): no
+                        // order change, so no dirty mark — just clear
+                        // the checkboxes.
+                        adapter.notifyDataSetChanged()
+                        updateMoveButton()
+                        setStatus("$n files are already in that position \u2014 no change.", type)
+                    } else {
+                        lists[type] = newList
+                        dirty[type] = true
+                        adapter.notifyDataSetChanged()
+                        updateSaveOrder()
+                        updateMoveButton()
+                        setStatus("$n files moved \u2014 Save Order to save.", type)
+                        toast("$n files moved \u2014 Save Order to save.")
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     // ------------------------------------------------------------ list adapter
 
     inner class MediaAdapter : RecyclerView.Adapter<MediaAdapter.Holder>() {
@@ -659,6 +1118,7 @@ class MainActivity : Activity() {
             val sub: TextView = v.findViewById(4)
             val del: Button = v.findViewById(5)
             val handle: TextView = v.findViewById(6)
+            val moveCheck: CheckBox = v.findViewById(7)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
@@ -680,6 +1140,12 @@ class MainActivity : Activity() {
             }
             frame.addView(glyph, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             row.addView(frame)
+            // Multi-select move checkbox (v1.17), a clickable child of
+            // the row like the Dropbox browser's: a tap on it is
+            // consumed by the checkbox itself, so it never reaches the
+            // row's tap/selection handler, and drag is untouched (drag
+            // starts only from the ≡ handle's own touch listener).
+            row.addView(CheckBox(this@MainActivity).apply { id = 7 })
             val texts = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -705,14 +1171,33 @@ class MainActivity : Activity() {
             notifyDataSetChanged()
         }
 
-        override fun getItemCount(): Int = lists[currentType]?.size ?: 0
+        override fun getItemCount(): Int = visibleMediaItems().size
 
         override fun onBindViewHolder(h: Holder, position: Int) {
             val items = lists[currentType] ?: return
-            val item = items[position]
+            val vis = visibleMediaItems()
+            if (position !in vis.indices) return
+            // The position shown is the item's place in the FULL list,
+            // so numbering stays truthful while a search is filtering.
+            val (fullIdx, item) = vis[position]
+            h.glyph.text = if (currentType == "audio") "🎵" else "▶"
             h.title.text = item.title
-            h.sub.text = "${position + 1} of ${items.size} · ${fmtSize(item.size)}"
+            h.sub.text = "${fullIdx + 1} of ${items.size} · ${fmtSize(item.size)}"
             h.del.setOnClickListener { confirmDelete(item) }
+            // Checkbox state comes from the move-selection set for
+            // this tab (keyed by item key, so it is correct on filtered
+            // rows too). Clear the listener before setting isChecked so
+            // a recycled holder never fires for the previous item; the
+            // new listener touches ONLY the set and the Move button —
+            // never the row selection, never a rebind.
+            val boundType = currentType
+            h.moveCheck.setOnCheckedChangeListener(null)
+            h.moveCheck.isChecked = moveSelection[boundType]?.contains(item.key) == true
+            h.moveCheck.setOnCheckedChangeListener { _, checked ->
+                val set = moveSelection.getOrPut(boundType) { mutableSetOf() }
+                if (checked) set.add(item.key) else set.remove(item.key)
+                updateMoveButton()
+            }
             h.itemView.background = if (item.key == selectedKey) selectedBg() else roundedBg(CARD)
             h.itemView.setOnClickListener {
                 selectedKey = if (selectedKey == item.key) null else item.key
@@ -770,18 +1255,23 @@ class MainActivity : Activity() {
     private var pendingType = "photos"
     private var queueActive = false
     private var queueCancelled = false
+    // Shared year for a multi-file upload queue (v1.16): set when Luddy
+    // picks "Use this year for all" in the queue's opening dialog, then
+    // every per-file dialog in that queue asks Title only. Null means
+    // each file is asked for its own year, as before.
+    private var queueSharedYear: String? = null
     private var progressDialog: AlertDialog? = null
     private var progressBar: ProgressBar? = null
     private var progressText: TextView? = null
 
-    // The import menu is one common list on both tabs (Luddy, 2026-11-14):
-    // the same ten sources in the same order everywhere; only the first
-    // entry's wording follows the tab (Photo on Photos, Video on Videos).
+    // The import menu is one common list on every media tab (Luddy,
+    // 2026-11-14): the same ten sources in the same order everywhere;
+    // only the first entry's wording follows the tab (Photo / Video / Audio).
     // Sources not yet connected (Google Drive, Microsoft OneDrive) stay
     // on the list and say so when tapped.
     private fun showSourceSheet(type: String) {
         pendingType = type
-        val kind = if (type == "photos") "Photo" else "Video"
+        val kind = kindName(type)
         val options = arrayOf(
             "From Device - $kind",
             "From Device - Files",
@@ -815,7 +1305,11 @@ class MainActivity : Activity() {
     private fun launchGallery(type: String) {
         pendingType = type
         val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            this.type = if (type == "photos") "image/*" else "video/*"
+            this.type = when (type) {
+                "photos" -> "image/*"
+                "videos" -> "video/*"
+                else -> "audio/*"
+            }
             addCategory(Intent.CATEGORY_OPENABLE)
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             navDeviceInitialUri()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
@@ -830,7 +1324,8 @@ class MainActivity : Activity() {
             this.type = when {
                 exportMode -> "*/*"
                 type == "photos" -> "image/*"
-                else -> "video/*"
+                type == "videos" -> "video/*"
+                else -> "audio/*"
             }
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             navDeviceInitialUri()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
@@ -869,7 +1364,11 @@ class MainActivity : Activity() {
     }
 
     private fun extFor(name: String, mime: String?, type: String): String {
-        val allowed = if (type == "photos") setOf("jpg", "jpeg", "png", "webp", "gif") else setOf("mp4", "webm")
+        val allowed = when (type) {
+            "photos" -> setOf("jpg", "jpeg", "png", "webp", "gif")
+            "videos" -> setOf("mp4", "webm")
+            else -> setOf("mp3", "m4a", "wav", "ogg", "flac", "aac")
+        }
         val suffix = name.substringAfterLast('.', "").lowercase()
         if (suffix in allowed) return ".$suffix"
         return when (mime) {
@@ -879,7 +1378,17 @@ class MainActivity : Activity() {
             "image/gif" -> ".gif"
             "video/mp4" -> ".mp4"
             "video/webm" -> ".webm"
-            else -> if (type == "photos") ".jpg" else ".mp4"
+            "audio/mpeg", "audio/mp3" -> ".mp3"
+            "audio/mp4", "audio/x-m4a" -> ".m4a"
+            "audio/wav", "audio/x-wav", "audio/wave" -> ".wav"
+            "audio/ogg" -> ".ogg"
+            "audio/flac", "audio/x-flac" -> ".flac"
+            "audio/aac" -> ".aac"
+            else -> when (type) {
+                "photos" -> ".jpg"
+                "videos" -> ".mp4"
+                else -> ".mp3"
+            }
         }
     }
 
@@ -891,13 +1400,75 @@ class MainActivity : Activity() {
         thread {
             val fresh = try { Api.list(this, type) } catch (e: Exception) { lists[type] ?: emptyList() }
             val start = nextNumber(fresh)
-            post { processQueueItem(type, uris, 0, start) }
+            post {
+                if (uris.size > 1) askSharedYearForQueue(type, uris, start)
+                else { queueSharedYear = null; processQueueItem(type, uris, 0, start) }
+            }
+        }
+    }
+
+    /** The year parsed from a patterned file name ("NNN - Title - YYYY.ext"), or null. */
+    private fun parseQueueYear(displayName: String): String? {
+        val m = Regex("^\\d+\\s*-\\s*(.+?)\\s*-\\s*(\\d{4})\\.[^.]+$").find(displayName)
+        return m?.groupValues?.get(2)
+    }
+
+    /**
+     * Multi-file queues only (v1.16): before the per-file dialogs, ask
+     * ONCE whether every file in this upload shares one year. "Use this
+     * year for all" validates the year and keeps the dialog open on an
+     * invalid entry; "Ask for each file" proceeds exactly as before.
+     * The field is prefilled when every file name parses to the SAME
+     * year, and left blank otherwise.
+     */
+    private fun askSharedYearForQueue(type: String, uris: List<Uri>, start: Int) {
+        val years = uris.map { parseQueueYear(displayName(it) ?: "") }
+        val prefill = if (years.all { it != null } && years.distinct().size == 1) years.first() ?: "" else ""
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        col.addView(TextView(this).apply {
+            text = "${uris.size} files selected. Give them all the same year, or name each file with its own year."
+            textSize = 13f; setTextColor(SUB)
+        })
+        val yearF = field("Year (4 digits)").apply {
+            setText(prefill)
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        col.addView(yearF)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Year for these files")
+            .setView(col)
+            .setPositiveButton("Use this year for all", null)
+            .setNegativeButton("Ask for each file") { _, _ ->
+                queueSharedYear = null
+                processQueueItem(type, uris, 0, start)
+            }
+            .setOnCancelListener {
+                queueSharedYear = null
+                queueActive = false
+                toast("Upload cancelled.")
+                refresh(type, keepOrder = false)
+            }
+            .create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val y = yearF.text.toString().trim()
+            if (!Regex("^\\d{4}$").matches(y)) {
+                yearF.error = "Enter a 4-digit year"
+                return@setOnClickListener
+            }
+            queueSharedYear = y
+            dialog.dismiss()
+            processQueueItem(type, uris, 0, start)
         }
     }
 
     private fun processQueueItem(type: String, uris: List<Uri>, index: Int, nextNum: Int) {
         if (index >= uris.size || queueCancelled) {
             queueActive = false
+            queueSharedYear = null
             toast(if (queueCancelled) "Upload cancelled." else "Upload complete.")
             refresh(type, keepOrder = false)
             return
@@ -924,7 +1495,7 @@ class MainActivity : Activity() {
                     processQueueItem(type, uris, index + 1, nextNum)
                 } else {
                     uploadCursor = nextNum
-                    askTitleYearThenUpload(type, staged, name) { success ->
+                    askTitleYearThenUpload(type, staged, name, queueSharedYear) { success ->
                         staged.delete()
                         processQueueItem(type, uris, index + 1, if (success) nextNum + 1 else nextNum)
                     }
@@ -934,7 +1505,7 @@ class MainActivity : Activity() {
     }
 
     /** Asks Title + Year (prefilled from the file name when it follows the pattern), then uploads the staged file. */
-    private fun askTitleYearThenUpload(type: String, file: File, displayName: String, onDone: (Boolean) -> Unit) {
+    private fun askTitleYearThenUpload(type: String, file: File, displayName: String, sharedYear: String? = null, onDone: (Boolean) -> Unit) {
         var fired = false
         val doneOnce: (Boolean) -> Unit = { ok -> if (!fired) { fired = true; onDone(ok) } }
         var preTitle = displayName.substringBeforeLast('.', displayName)
@@ -946,19 +1517,30 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(8), dp(20), 0)
         }
         val titleF = field("Title").apply { setText(preTitle) }
-        val yearF = field("Year (4 digits)").apply {
+        // Shared-year queues (v1.16) ask Title only: the year is already
+        // settled for the whole upload and is shown as a plain line
+        // below instead of a field.
+        val yearF: EditText? = if (sharedYear != null) null else field("Year (4 digits)").apply {
             setText(preYear)
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
         }
-        col.addView(TextView(this).apply { text = "“$displayName” will be added as the next ${if (type == "photos") "photo" else "video"}. The name follows the page pattern: number - Title - Year."; textSize = 13f; setTextColor(SUB) })
+        col.addView(TextView(this).apply { text = "“$displayName” will be added as the next ${kindLower(type)}. The name follows the page pattern: number - Title - Year."; textSize = 13f; setTextColor(SUB) })
         col.addView(titleF)
-        col.addView(yearF)
+        if (sharedYear != null) {
+            col.addView(TextView(this).apply {
+                text = "Year: $sharedYear (same for all files in this upload)"
+                textSize = 13f; setTextColor(SUB)
+                setPadding(0, dp(10), 0, 0)
+            })
+        } else if (yearF != null) {
+            col.addView(yearF)
+        }
         AlertDialog.Builder(this)
-            .setTitle(if (type == "photos") "Name this photo" else "Name this video")
+            .setTitle("Name this ${kindLower(type)}")
             .setView(col)
             .setPositiveButton("Upload") { _, _ ->
                 val title = titleF.text.toString().trim().replace('/', '-')
-                val year = yearF.text.toString().trim()
+                val year = sharedYear ?: (yearF?.text?.toString()?.trim() ?: "")
                 if (title.isEmpty() || !Regex("^\\d{4}$").matches(year)) {
                     toast("A title and a 4-digit year are needed — item skipped.")
                     doneOnce(false)
@@ -1037,7 +1619,7 @@ class MainActivity : Activity() {
                 val cb: (Long, Long) -> Unit = { sent, total ->
                     post { setProgress(if (total > 0) (sent * 1000 / total).toInt() else 0, "${fmtSize(sent)} of ${fmtSize(total)}") }
                 }
-                if (type == "photos") Api.putFile(this, key, file, cb) else Api.multipartUpload(this, key, file, cb)
+                if (type == "videos") Api.multipartUpload(this, key, file, cb) else Api.putFile(this, key, file, cb)
                 val posterOk = if (type == "videos") uploadPoster(key, posterFromFile(file)) else false
                 post {
                     hideProgress()
@@ -1156,6 +1738,34 @@ class MainActivity : Activity() {
             .apply()
     }
 
+    // Dropbox picker thumbnails (2026-11-15): real previews — a photo's
+    // thumbnail, a video's poster — fetched through the server (which
+    // asks Dropbox for them), cached for the session, so files in the
+    // Dropbox browser can be picked by sight. Same loading shape as
+    // the library adapter's thumbnails. A file Dropbox cannot
+    // thumbnail keeps the row's clearly generic glyph.
+    private val dbxThumbCache = HashMap<String, Bitmap>()
+    private val dbxThumbLoading = HashSet<String>()
+    private val dbxThumbPool = Executors.newFixedThreadPool(3)
+
+    private fun loadDbxThumb(path: String, onLoaded: () -> Unit) {
+        synchronized(dbxThumbLoading) { if (!dbxThumbLoading.add(path)) return }
+        dbxThumbPool.execute {
+            try {
+                val bytes = Api.dropboxThumb(this, path)
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bmp != null) {
+                    synchronized(dbxThumbCache) { dbxThumbCache[path] = bmp }
+                    post { onLoaded() }
+                }
+            } catch (e: Exception) {
+                Diag.record(this, "dbx thumb $path", e)
+            } finally {
+                synchronized(dbxThumbLoading) { dbxThumbLoading.remove(path) }
+            }
+        }
+    }
+
     private fun openDropboxBrowser(type: String) {
         showDropboxBrowser(type, navRememberedPath("dropbox"))
     }
@@ -1173,6 +1783,11 @@ class MainActivity : Activity() {
     // ljm3.me/oauth/dropbox); the app only browses and picks. Picking a
     // file asks Title + Year, then the server copies it straight from
     // Dropbox into the library — the file never passes through the phone.
+    // File rows also carry checkboxes for multi-select (v1.16):
+    // "Import selected (N)" imports several files at once under one
+    // shared year, each file keeping its own name as its title; the
+    // imports run sequentially so the server assigns each file its
+    // next number in turn.
 
     private fun showDropboxBrowser(type: String, path: String, isFallback: Boolean = false) {
         showProgress("Dropbox", "Loading…", indeterminate = true)
@@ -1196,35 +1811,227 @@ class MainActivity : Activity() {
 
     private fun showDropboxEntries(type: String, path: String, entries: List<Api.DbxEntry>) {
         navSavePath("dropbox", path)
-        val allowed = if (type == "photos") setOf("jpg", "jpeg", "png", "webp", "gif") else setOf("mp4", "webm")
-        val labels = ArrayList<String>()
-        val actions = ArrayList<() -> Unit>()
+        val allowed = when (type) {
+            "photos" -> setOf("jpg", "jpeg", "png", "webp", "gif")
+            "videos" -> setOf("mp4", "webm")
+            else -> setOf("mp3", "m4a", "wav", "ogg", "flac", "aac")
+        }
+        // One picker row: its text label, the Dropbox entry whose
+        // thumbnail should show beside it (photo/video files only),
+        // the file entry itself on file rows (null on folders, the Up
+        // row, and the empty placeholder — those rows get no checkbox),
+        // and the tap action — the same rows, order, and actions as
+        // the text-only list this replaces; only the previews are new.
+        class DbxRow(val label: String, val thumbEntry: Api.DbxEntry?, val entry: Api.DbxEntry?, val action: () -> Unit)
+        val rows = ArrayList<DbxRow>()
         if (path.isNotEmpty()) {
-            labels.add("⬆  Up one level")
             val parent = path.substringBeforeLast('/', "")
-            actions.add { showDropboxBrowser(type, parent) }
+            rows.add(DbxRow("⬆  Up one level", null, null) { showDropboxBrowser(type, parent) })
         }
         var hidden = 0
         for (e in entries) {
             if (e.tag == "folder") {
-                labels.add("📁  ${e.name}")
                 val p = e.path
-                actions.add { showDropboxBrowser(type, p) }
+                rows.add(DbxRow("📁  ${e.name}", null, null) { showDropboxBrowser(type, p) })
             } else if (e.name.substringAfterLast('.', "").lowercase() in allowed) {
-                labels.add("${e.name}  (${fmtSize(e.size)})")
-                actions.add { showDropboxNameDialog(type, e) }
+                val thumb = if (type == "photos" || type == "videos") e else null
+                rows.add(DbxRow("${e.name}  (${fmtSize(e.size)})", thumb, e) { showDropboxNameDialog(type, e) })
             } else hidden++
         }
-        if (actions.isEmpty()) {
-            labels.add("(nothing here that can be added)")
-            actions.add { }
+        if (rows.isEmpty()) {
+            rows.add(DbxRow("(nothing here that can be added)", null, null) { })
         }
-        AlertDialog.Builder(this)
+        // Multi-select (v1.16): the paths of the file rows whose
+        // checkbox is ticked. The browser dialog's positive button is
+        // "Import selected (N)", shown and enabled only while N >= 1.
+        val selectedPaths = LinkedHashSet<String>()
+        var browserDialog: AlertDialog? = null
+        fun updateImportButton() {
+            val dlg = browserDialog ?: return
+            val btn = try { dlg.getButton(AlertDialog.BUTTON_POSITIVE) } catch (e: Exception) { null } ?: return
+            val n = selectedPaths.size
+            btn.text = "Import selected ($n)"
+            btn.visibility = if (n >= 1) View.VISIBLE else View.GONE
+            btn.isEnabled = n >= 1
+        }
+        val adapter = object : BaseAdapter() {
+            override fun getCount(): Int = rows.size
+            override fun getItem(position: Int): Any = rows[position]
+            override fun getItemId(position: Int): Long = position.toLong()
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val row = rows[position]
+                val ll = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    background = roundedBg(CARD)
+                    setPadding(dp(10), dp(8), dp(10), dp(8))
+                }
+                val e = row.thumbEntry
+                if (e != null) {
+                    val frame = FrameLayout(this@MainActivity).apply {
+                        layoutParams = LinearLayout.LayoutParams(dp(64), dp(64)).apply { marginEnd = dp(10) }
+                        setBackgroundColor(BG)
+                    }
+                    val img = ImageView(this@MainActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+                    val glyph = TextView(this@MainActivity).apply {
+                        text = if (type == "videos") "▶" else "🖼"
+                        textSize = 20f; setTextColor(GOLD); gravity = Gravity.CENTER
+                    }
+                    frame.addView(img, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    frame.addView(glyph, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    val cached = synchronized(dbxThumbCache) { dbxThumbCache[e.path] }
+                    if (cached != null) {
+                        img.setImageBitmap(cached)
+                        glyph.visibility = View.GONE
+                    } else {
+                        loadDbxThumb(e.path) { notifyDataSetChanged() }
+                    }
+                    ll.addView(frame)
+                }
+                val fileEntry = row.entry
+                if (fileEntry != null) {
+                    // The checkbox toggles selection ONLY: it is a
+                    // clickable child of the row, so a tap on it never
+                    // reaches the row's tap/navigation, while tapping
+                    // the row body keeps the single-file flow. Audio
+                    // rows have no thumbnail frame but still get one.
+                    val cb = CheckBox(this@MainActivity).apply {
+                        setOnCheckedChangeListener(null)
+                        isChecked = selectedPaths.contains(fileEntry.path)
+                        setOnCheckedChangeListener { _, checked ->
+                            if (checked) selectedPaths.add(fileEntry.path) else selectedPaths.remove(fileEntry.path)
+                            updateImportButton()
+                        }
+                    }
+                    ll.addView(cb)
+                }
+                ll.addView(TextView(this@MainActivity).apply {
+                    text = row.label; textSize = 15f; setTextColor(TEXT)
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                return ll
+            }
+        }
+        val dialog = AlertDialog.Builder(this)
             .setTitle(if (path.isEmpty()) "Dropbox — top level" else "Dropbox — ${path.substringAfterLast('/')}")
-            .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
+            .setAdapter(adapter) { _, which -> rows[which].action() }
+            .setPositiveButton("Import selected (0)", null)
             .setNegativeButton("Close", null)
-            .show()
-        if (hidden > 0) toast("$hidden file(s) here are not ${if (type == "photos") "photos" else "videos"} and are not shown.")
+            .create()
+        browserDialog = dialog
+        dialog.show()
+        val importBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        importBtn.visibility = View.GONE
+        importBtn.isEnabled = false
+        importBtn.setOnClickListener {
+            val selected = rows.mapNotNull { it.entry }.filter { selectedPaths.contains(it.path) }
+            if (selected.isEmpty()) return@setOnClickListener
+            showDropboxMultiImport(type, selected, dialog)
+        }
+        if (hidden > 0) toast("$hidden file(s) here are not $type and are not shown.")
+    }
+
+    /** Trailing year of a Dropbox file name: the name minus its extension, then "- YYYY" at the end. */
+    private fun dbxYearOf(name: String): String? {
+        val base = name.substringBeforeLast('.', name)
+        val m = Regex("^(.+?)\\s*-\\s*(\\d{4})$").find(base)
+        return m?.groupValues?.get(2)
+    }
+
+    /** The single-flow title prefill for a Dropbox file name: name minus extension, minus a trailing "- YYYY". */
+    private fun dbxTitleOf(name: String): String {
+        var base = name.substringBeforeLast('.', name)
+        val m = Regex("^(.+?)\\s*-\\s*(\\d{4})$").find(base)
+        if (m != null) base = m.groupValues[1]
+        return base.trim()
+    }
+
+    /**
+     * Multi-select import (v1.16): ONE shared-year dialog for the whole
+     * selection — each file keeps its own name as its title — then the
+     * files import sequentially on a background thread (the server
+     * assigns the next number per call, so they number in turn). The
+     * year is prefilled when every selected name parses to the same
+     * trailing year. Ends with a summary ("Imported X of N", naming
+     * any failures), a reload of the tab's list, and the browser closed.
+     */
+    private fun showDropboxMultiImport(type: String, selected: List<Api.DbxEntry>, browserDialog: AlertDialog) {
+        val years = selected.map { dbxYearOf(it.name) }
+        val prefill = if (years.all { it != null } && years.distinct().size == 1) years.first() ?: "" else ""
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        col.addView(TextView(this).apply {
+            text = "${selected.size} files selected. Each file keeps its own name as its title — give them all the same year:"
+            textSize = 13f; setTextColor(SUB)
+        })
+        for (e in selected) {
+            col.addView(TextView(this).apply {
+                text = "• ${dbxTitleOf(e.name)}"
+                textSize = 13f; setTextColor(SUB)
+                setPadding(dp(8), dp(2), 0, 0)
+            })
+        }
+        val yearF = field("Year (4 digits)").apply {
+            setText(prefill)
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        col.addView(yearF)
+        val yearDialog = AlertDialog.Builder(this)
+            .setTitle("Year for these files")
+            .setView(col)
+            .setPositiveButton("Import", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+        yearDialog.show()
+        yearDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val y = yearF.text.toString().trim()
+            if (!Regex("^\\d{4}$").matches(y)) {
+                yearF.error = "Enter a 4-digit year"
+                return@setOnClickListener
+            }
+            yearDialog.dismiss()
+            val progressText = TextView(this).apply {
+                text = "Importing 1 of ${selected.size}…"
+                textSize = 14f; setTextColor(TEXT)
+                setPadding(dp(24), dp(20), dp(24), dp(12))
+            }
+            val progressDialog = AlertDialog.Builder(this)
+                .setTitle("Importing from Dropbox")
+                .setView(progressText)
+                .setCancelable(false)
+                .create()
+            progressDialog.show()
+            thread {
+                var ok = 0
+                val failures = ArrayList<String>()
+                for ((i, e) in selected.withIndex()) {
+                    post { progressText.text = "Importing ${i + 1} of ${selected.size}…" }
+                    try {
+                        Api.dropboxImport(this, e.path, type, dbxTitleOf(e.name), y)
+                        ok++
+                    } catch (ex: Exception) {
+                        Diag.record(this, "dropboxImport multi", ex)
+                        failures.add(e.name)
+                    }
+                }
+                post {
+                    progressDialog.dismiss()
+                    try { browserDialog.dismiss() } catch (ignored: Exception) { }
+                    refresh(type, keepOrder = false)
+                    if (failures.isEmpty()) {
+                        toast("Imported $ok of ${selected.size}")
+                    } else {
+                        AlertDialog.Builder(this)
+                            .setTitle("Dropbox import")
+                            .setMessage("Imported $ok of ${selected.size}.\n\nFailed:\n" + failures.joinToString("\n") { "• $it" })
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+            }
+        }
     }
 
     private fun showDropboxNameDialog(type: String, entry: Api.DbxEntry) {
@@ -1236,7 +2043,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), 0)
         }
-        col.addView(TextView(this).apply { text = "“${entry.name}” (${fmtSize(entry.size)}) will be copied from Dropbox as the next ${if (type == "photos") "photo" else "video"}."; textSize = 13f; setTextColor(SUB) })
+        col.addView(TextView(this).apply { text = "“${entry.name}” (${fmtSize(entry.size)}) will be copied from Dropbox as the next ${kindLower(type)}."; textSize = 13f; setTextColor(SUB) })
         val titleF = field("Title").apply { setText(preTitle) }
         val yearF = field("Year (4 digits)").apply {
             setText(preYear)
@@ -1245,7 +2052,7 @@ class MainActivity : Activity() {
         col.addView(titleF)
         col.addView(yearF)
         AlertDialog.Builder(this)
-            .setTitle(if (type == "photos") "Name this photo" else "Name this video")
+            .setTitle("Name this ${kindLower(type)}")
             .setView(col)
             .setPositiveButton("Import") { _, _ ->
                 val t = titleF.text.toString().trim()
@@ -1277,7 +2084,7 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(8), dp(20), 0)
         }
         col.addView(TextView(this).apply {
-            text = "Paste a link to the file — a Dropbox share link works (the server fetches it directly, so a large video never passes through the phone)."
+            text = "Paste a link to the file — a Dropbox share link works (the server fetches it directly, so a large file never passes through the phone)."
             textSize = 13f; setTextColor(SUB)
         })
         val urlF = field("https://…")
@@ -1285,7 +2092,7 @@ class MainActivity : Activity() {
         val yearF = field("Year (4 digits)").apply { inputType = android.text.InputType.TYPE_CLASS_NUMBER }
         col.addView(urlF); col.addView(titleF); col.addView(yearF)
         AlertDialog.Builder(this)
-            .setTitle(if (type == "photos") "Import a photo from a link" else "Import a video from a link")
+            .setTitle("Import a ${kindLower(type)} from a link")
             .setView(col)
             .setPositiveButton("Import") { _, _ ->
                 val u = urlF.text.toString().trim()
@@ -1381,6 +2188,747 @@ class MainActivity : Activity() {
             .setMessage(body)
             .setPositiveButton("Open Files") { _, _ -> launchFiles(pendingType, exportMode = true) }
             .setNegativeButton("Close", null)
+            .show()
+    }
+
+    // ------------------------------------------------------------ links catalog
+    // The Links tab (v1.10). The catalog starts COMPLETELY empty and
+    // there is no predefined category list anywhere: categories and
+    // subcategories exist only because links were placed under them.
+    // The pickers below therefore offer only what the loaded catalog
+    // already uses, plus "New category…".
+    // v1.12: the list is a RecyclerView (LinksAdapter) like the media
+    // tabs, and link rows carry a ≡ drag handle — drag reorders
+    // within the link's own group only and, like ▲/▼, is local until
+    // Save Order.
+
+    private fun refreshLinks() {
+        setStatus("Loading links…", "links")
+        thread {
+            try {
+                val (cats, items) = Api.linksList(this)
+                post {
+                    linksCategories = cats
+                    linksItems.clear()
+                    linksItems.addAll(items)
+                    linksLoaded = true
+                    // A reload replaces the local state wholesale: any
+                    // unsaved local order no longer describes the list,
+                    // and a selection may point at a link that is gone.
+                    linksDirtyGroups.clear()
+                    if (selectedLinkId != null && items.none { it.id == selectedLinkId }) selectedLinkId = null
+                    // v1.17: prune move-checkbox ids that no longer
+                    // exist, for the same stale-key reason as media.
+                    linkMoveSelection.retainAll(items.map { it.id }.toSet())
+                    setStatus("${items.size} links in the catalog, grouped by category.", "links")
+                    if (currentType == "links") {
+                        renderLinks()
+                        updateSaveOrder()
+                    }
+                }
+            } catch (e: Exception) {
+                Diag.record(this, "linksList", e)
+                post { setStatus("Could not load links: ${e.message}", "links") }
+            }
+        }
+    }
+
+    /** Categories already in use, first-appearance order (server list first). */
+    private fun existingCats(): List<String> {
+        val out = ArrayList<String>()
+        for (c in linksCategories) if (c.isNotEmpty() && c !in out) out.add(c)
+        for (l in linksItems) if (l.cat.isNotEmpty() && l.cat !in out) out.add(l.cat)
+        return out
+    }
+
+    /** Subcategories already in use under one category, first-appearance order. */
+    private fun existingSubs(cat: String): List<String> {
+        val out = ArrayList<String>()
+        for (l in linksItems) if (l.cat == cat && l.sub.isNotEmpty() && l.sub !in out) out.add(l.sub)
+        return out
+    }
+
+    /** (category, subcategory) groups in first-appearance order. */
+    private fun linkGroups(): List<Triple<String, String, List<Api.LinkItem>>> {
+        val map = LinkedHashMap<Pair<String, String>, MutableList<Api.LinkItem>>()
+        for (l in linksItems) map.getOrPut(l.cat to l.sub) { ArrayList() }.add(l)
+        return map.map { (k, v) -> Triple(k.first, k.second, v.toList()) }
+    }
+
+    /**
+     * One row of the Links RecyclerView (v1.12): a group header, a
+     * link entry (displayIdx/displaySize are the link's place within
+     * the DISPLAYED group, which a search may have narrowed), or a
+     * plain message line for the loading / empty / no-match states.
+     */
+    sealed class LinkRow {
+        data class Header(val cat: String, val sub: String) : LinkRow()
+        data class Entry(val item: Api.LinkItem, val displayIdx: Int, val displaySize: Int) : LinkRow()
+        data class Message(val text: String) : LinkRow()
+    }
+
+    /**
+     * The Links display rows for the current catalog + search. The
+     * tab's search narrows the display only: a group shows just its
+     * matching links, and a group with no matches is not shown at
+     * all. The underlying catalog order is untouched.
+     */
+    private fun visibleLinkRows(): MutableList<LinkRow> {
+        if (!linksLoaded) return mutableListOf(LinkRow.Message("Loading links\u2026"))
+        if (linksItems.isEmpty()) return mutableListOf(LinkRow.Message("No links yet \u2014 tap Add Link to add the first one. Categories and subcategories are created as you place links under them."))
+        val q = (searchQueries["links"] ?: "").trim().lowercase()
+        val rows = ArrayList<LinkRow>()
+        var shown = 0
+        for ((cat, sub, group) in linkGroups()) {
+            val visible = if (q.isEmpty()) group else group.filter { l ->
+                l.name.lowercase().contains(q) || l.url.lowercase().contains(q) ||
+                    l.cat.lowercase().contains(q) || l.sub.lowercase().contains(q)
+            }
+            if (visible.isEmpty()) continue
+            shown += visible.size
+            rows.add(LinkRow.Header(cat, sub))
+            visible.forEachIndexed { idx, item -> rows.add(LinkRow.Entry(item, idx, visible.size)) }
+        }
+        if (shown == 0) {
+            return mutableListOf(LinkRow.Message("No links match \u201C${searchQueries["links"]?.trim()}\u201D."))
+        }
+        return rows
+    }
+
+    private fun renderLinks() {
+        if (::linksAdapter.isInitialized) {
+            linksAdapter.rows = visibleLinkRows()
+            linksAdapter.notifyDataSetChanged()
+        }
+        updateRename()
+    }
+
+    private fun smallButton(text: String): Button = Button(this).apply {
+        this.text = text
+        textSize = 12f
+        setTextColor(TEXT)
+        background = roundedBg(BG)
+        minWidth = 0
+        minimumWidth = 0
+        setPadding(dp(7), 0, dp(7), 0)
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40)).apply { marginStart = dp(4) }
+    }
+
+    /**
+     * The Links list adapter (v1.12), mirroring MediaAdapter: group
+     * headers and message lines are plain rows, link rows carry the
+     * \u2261 drag handle at the left edge. The drag itself is driven by
+     * the ItemTouchHelper attached in showLibrary \u2014 it starts from
+     * the handle only (long-press drag is disabled), stays inside
+     * the dragged link's own group, and is off while a search is
+     * filtering. Everything else about a row is the v1.11 behavior:
+     * tap selects (gold outline) for the Rename / Move buttons,
+     * favicon + name + "N of M \u00B7 host", \u25B2/\u25BC local moves,
+     * \u2197 opens, \u2715 deletes with confirm.
+     */
+    inner class LinksAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        var touchHelper: ItemTouchHelper? = null
+        var rows: MutableList<LinkRow> = ArrayList()
+
+        inner class HeaderHolder(v: View) : RecyclerView.ViewHolder(v) {
+            val text: TextView = v as TextView
+        }
+
+        inner class MessageHolder(v: View) : RecyclerView.ViewHolder(v) {
+            val text: TextView = v as TextView
+        }
+
+        inner class EntryHolder(v: View) : RecyclerView.ViewHolder(v) {
+            val moveCheck: CheckBox = v.findViewById(20)
+            val handle: TextView = v.findViewById(11)
+            val glyph: TextView = v.findViewById(12)
+            val favicon: ImageView = v.findViewById(13)
+            val name: TextView = v.findViewById(14)
+            val sub: TextView = v.findViewById(15)
+            val up: Button = v.findViewById(16)
+            val dn: Button = v.findViewById(17)
+            val open: Button = v.findViewById(18)
+            val del: Button = v.findViewById(19)
+        }
+
+        override fun getItemViewType(position: Int): Int = when (rows[position]) {
+            is LinkRow.Header -> 0
+            is LinkRow.Entry -> 1
+            is LinkRow.Message -> 2
+        }
+
+        override fun getItemCount(): Int = rows.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            return when (viewType) {
+                0 -> HeaderHolder(TextView(this@MainActivity).apply {
+                    textSize = 15f; setTextColor(GOLD)
+                    setPadding(0, dp(12), 0, dp(6))
+                    layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                })
+                2 -> MessageHolder(TextView(this@MainActivity).apply {
+                    textSize = 13.5f; setTextColor(SUB)
+                    layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                })
+                else -> {
+                    val row = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(10), dp(8), dp(6), dp(8))
+                        layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) }
+                    }
+                    val handle = TextView(this@MainActivity).apply {
+                        id = 11; text = "\u2261"; textSize = 22f; setTextColor(SUB); gravity = Gravity.CENTER
+                        setPadding(dp(2), dp(8), dp(8), dp(8))
+                    }
+                    row.addView(handle)
+                    // Multi-select move checkbox (v1.17): a clickable
+                    // child of the row, placed after the ≡ handle so
+                    // the handle stays at the left edge. A tap on it is
+                    // consumed by the checkbox, so it never fires the
+                    // row's selection tap and never starts a drag
+                    // (drag starts only from the handle's listener).
+                    row.addView(CheckBox(this@MainActivity).apply { id = 20 })
+                    val frame = FrameLayout(this@MainActivity).apply {
+                        layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginEnd = dp(10) }
+                        setBackgroundColor(BG)
+                    }
+                    val glyph = TextView(this@MainActivity).apply {
+                        id = 12; text = "\uD83D\uDD17"; textSize = 15f; gravity = Gravity.CENTER
+                    }
+                    frame.addView(glyph, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    val img = ImageView(this@MainActivity).apply { id = 13; scaleType = ImageView.ScaleType.CENTER_INSIDE }
+                    frame.addView(img, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                    row.addView(frame)
+                    val texts = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                    texts.addView(TextView(this@MainActivity).apply { id = 14; textSize = 14.5f; setTextColor(TEXT) })
+                    texts.addView(TextView(this@MainActivity).apply {
+                        id = 15; textSize = 12f; setTextColor(SUB)
+                        maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                    })
+                    row.addView(texts)
+                    val up = smallButton("\u25B2"); up.id = 16; row.addView(up)
+                    val dn = smallButton("\u25BC"); dn.id = 17; row.addView(dn)
+                    val open = smallButton("\u2197"); open.id = 18; row.addView(open)
+                    val del = Button(this@MainActivity).apply {
+                        id = 19; text = "\u2715"; textSize = 14f; setTextColor(Color.rgb(255, 154, 138)); setBackgroundColor(Color.TRANSPARENT)
+                    }
+                    row.addView(del, LinearLayout.LayoutParams(dp(40), dp(44)))
+                    EntryHolder(row)
+                }
+            }
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            when (val row = rows[position]) {
+                is LinkRow.Header -> (holder as HeaderHolder).text.text =
+                    if (row.sub.isEmpty()) row.cat else "${row.cat} \u203A ${row.sub}"
+                is LinkRow.Message -> (holder as MessageHolder).text.text = row.text
+                is LinkRow.Entry -> bindEntry(holder as EntryHolder, row)
+            }
+        }
+
+        private fun bindEntry(h: EntryHolder, row: LinkRow.Entry) {
+            val item = row.item
+            // Move checkbox (v1.17): listener cleared before isChecked
+            // is set so a recycled holder never fires for the previous
+            // link; toggling touches ONLY the move set and the Move
+            // button — never the row selection.
+            h.moveCheck.setOnCheckedChangeListener(null)
+            h.moveCheck.isChecked = linkMoveSelection.contains(item.id)
+            h.moveCheck.setOnCheckedChangeListener { _, checked ->
+                if (checked) linkMoveSelection.add(item.id) else linkMoveSelection.remove(item.id)
+                updateMoveButton()
+            }
+            h.itemView.background = if (item.id == selectedLinkId) selectedBg() else roundedBg(CARD)
+            // Tap selects (the media tabs' behavior) for the Rename /
+            // Move buttons in the actions row; opening lives on the
+            // \u2197 button below so the two never conflict.
+            h.itemView.setOnClickListener {
+                selectedLinkId = if (selectedLinkId == item.id) null else item.id
+                notifyDataSetChanged()
+                updateRename()
+            }
+            h.handle.setOnTouchListener { _, ev ->
+                if (ev.actionMasked == MotionEvent.ACTION_DOWN) touchHelper?.startDrag(h)
+                false
+            }
+            val host = try { URL(item.url).host ?: "" } catch (e: Exception) { "" }
+            h.glyph.visibility = View.VISIBLE
+            h.favicon.setImageBitmap(null)
+            if (host.isNotEmpty()) loadFavicon(host, h.favicon, h.glyph)
+            h.name.text = item.name
+            // The Update page's sub-line: place within the group, then the host.
+            h.sub.text = "${row.displayIdx + 1} of ${row.displaySize}" + if (host.isNotEmpty()) " \u00B7 $host" else ""
+            // \u25B2/\u25BC bounds follow the FULL group, not the filtered
+            // display: a move always swaps with the true neighbor in
+            // the catalog.
+            val fullGroup = linksItems.filter { it.cat == item.cat && it.sub == item.sub }
+            val fullIdx = fullGroup.indexOfFirst { it.id == item.id }
+            h.up.isEnabled = fullIdx > 0
+            h.up.alpha = if (fullIdx > 0) 1f else 0.35f
+            h.up.setOnClickListener { moveLinkWithinGroup(item, -1) }
+            h.dn.isEnabled = fullIdx >= 0 && fullIdx < fullGroup.size - 1
+            h.dn.alpha = if (h.dn.isEnabled) 1f else 0.35f
+            h.dn.setOnClickListener { moveLinkWithinGroup(item, 1) }
+            h.open.setOnClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.url)))
+                } catch (e: Exception) {
+                    toast("Could not open that link.")
+                }
+            }
+            h.del.setOnClickListener { confirmDeleteLink(item) }
+        }
+    }
+
+    /**
+     * One drag step (v1.12): swap two links of the SAME group in the
+     * catalog's local order and mark the group dirty \u2014 the same
+     * local-only trail as \u25B2/\u25BC, so nothing reaches the server
+     * until Save Order. The helper refuses cross-group targets before
+     * this is ever called; the group check here is a second lock.
+     */
+    private fun swapLinksForDrag(a: Api.LinkItem, b: Api.LinkItem) {
+        if (a.cat != b.cat || a.sub != b.sub) return
+        val group = linksItems.filter { it.cat == a.cat && it.sub == a.sub }
+        val ids = group.map { it.id }.toMutableList()
+        val ia = ids.indexOf(a.id)
+        val ib = ids.indexOf(b.id)
+        if (ia < 0 || ib < 0 || ia == ib) return
+        Collections.swap(ids, ia, ib)
+        applyGroupOrder(a.cat, a.sub, ids)
+        linksDirtyGroups.add(a.cat to a.sub)
+        linksDragMoved = true
+    }
+
+    /** Google s2 favicon for the row, cached; the 🔗 glyph stays on any failure. */
+    private fun loadFavicon(host: String, img: ImageView, glyph: TextView) {
+        img.tag = host
+        val cached = synchronized(faviconCache) { faviconCache[host] }
+        if (cached != null) {
+            img.setImageBitmap(cached)
+            glyph.visibility = View.GONE
+            return
+        }
+        synchronized(faviconLoading) { if (!faviconLoading.add(host)) return }
+        faviconPool.execute {
+            try {
+                val conn = URL("https://www.google.com/s2/favicons?domain=$host&sz=64").openConnection() as HttpURLConnection
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 10_000
+                val bytes = conn.inputStream.use { it.readBytes() }
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bmp != null) {
+                    synchronized(faviconCache) { faviconCache[host] = bmp }
+                    post {
+                        if (img.tag == host) {
+                            img.setImageBitmap(bmp)
+                            glyph.visibility = View.GONE
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Decoration only — the glyph fallback stays.
+            } finally {
+                synchronized(faviconLoading) { faviconLoading.remove(host) }
+            }
+        }
+    }
+
+    /**
+     * ▲/▼ on a link row (v1.11): the swap happens in the LOCAL list
+     * only and the group is marked dirty — nothing reaches the server
+     * until Save Order, exactly like the media tabs' drag reorder.
+     * The swap is computed on the full group, never the filtered
+     * display, so a search can never corrupt the saved order.
+     */
+    private fun moveLinkWithinGroup(item: Api.LinkItem, dir: Int) {
+        val group = linksItems.filter { it.cat == item.cat && it.sub == item.sub }
+        val idx = group.indexOfFirst { it.id == item.id }
+        val swap = idx + dir
+        if (idx < 0 || swap < 0 || swap >= group.size) return
+        val ids = group.map { it.id }.toMutableList()
+        Collections.swap(ids, idx, swap)
+        applyGroupOrder(item.cat, item.sub, ids)
+        linksDirtyGroups.add(item.cat to item.sub)
+        renderLinks()
+        updateSaveOrder()
+        setStatus("Order changed — tap Save Order to save it.", "links")
+    }
+
+    /**
+     * Save Order on the Links tab: one /media-admin/links/reorder
+     * call per dirty group, with that group's ids in their new local
+     * order (the server requires the ids to be exactly the group's
+     * membership). A failure keeps the dirty marks and names the
+     * error in the tab's status, so nothing is silently half-saved
+     * without saying so.
+     */
+    private fun saveLinksOrder() {
+        if (linksDirtyGroups.isEmpty()) return
+        val groups = linksDirtyGroups.toList()
+        setStatus("Saving the new order…", "links")
+        thread {
+            try {
+                for ((cat, sub) in groups) {
+                    val ids = linksItems.filter { it.cat == cat && it.sub == sub }.map { it.id }
+                    if (ids.isNotEmpty()) Api.linksReorder(this, cat, sub, ids)
+                }
+                post {
+                    linksDirtyGroups.removeAll(groups.toSet())
+                    renderLinks()
+                    updateSaveOrder()
+                    setStatus("Order saved.", "links")
+                    toast("Order saved.")
+                }
+            } catch (e: Exception) {
+                Diag.record(this, "linksSaveOrder", e)
+                post { setStatus("Saving the order failed: ${e.message}", "links") }
+            }
+        }
+    }
+
+    private fun applyGroupOrder(cat: String, sub: String, ids: List<String>) {
+        val byId = linksItems.associateBy { it.id }
+        val groupItems = ids.mapNotNull { byId[it] }
+        val firstIdx = linksItems.indexOfFirst { it.cat == cat && it.sub == sub }
+        if (firstIdx < 0) return
+        linksItems.removeAll { it.cat == cat && it.sub == sub }
+        linksItems.addAll(firstIdx.coerceAtMost(linksItems.size), groupItems)
+    }
+
+    private data class PickerRefs(val spinner: Spinner, val newCat: EditText, val sub: AutoCompleteTextView)
+
+    private fun darkSpinnerAdapter(items: List<String>): ArrayAdapter<String> {
+        return object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getView(position, convertView, parent) as TextView
+                v.setTextColor(TEXT)
+                v.textSize = 15f
+                v.setPadding(dp(10), dp(8), dp(10), dp(8))
+                return v
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getDropDownView(position, convertView, parent) as TextView
+                v.setTextColor(TEXT)
+                v.textSize = 15f
+                v.setBackgroundColor(CARD)
+                v.setPadding(dp(10), dp(10), dp(10), dp(10))
+                return v
+            }
+        }
+    }
+
+    /**
+     * Appends the Category + Subcategory fields to a dialog column.
+     * The category spinner lists ONLY the categories already in the
+     * catalog plus "New category…" (which reveals a text field) — with
+     * an empty catalog that is the only entry. The subcategory field is
+     * free text with suggestions drawn only from the subs already used
+     * under the chosen category.
+     */
+    private fun addCatSubFields(col: LinearLayout, currentCat: String, currentSub: String): PickerRefs {
+        val cats = existingCats()
+        val entries = cats + NEW_CATEGORY_LABEL
+        col.addView(label("Category", 13f, SUB).apply { setPadding(0, dp(10), 0, dp(2)) })
+        val spinner = Spinner(this).apply {
+            adapter = darkSpinnerAdapter(entries)
+            background = roundedBg(CARD)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        col.addView(spinner)
+        val newCat = field("New category name")
+        col.addView(newCat)
+        col.addView(label("Subcategory (optional)", 13f, SUB).apply { setPadding(0, dp(10), 0, dp(2)) })
+        val sub = AutoCompleteTextView(this).apply {
+            hint = "Subcategory"
+            setTextColor(TEXT)
+            setHintTextColor(SUB)
+            textSize = 15f
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            threshold = 1
+            setText(currentSub)
+        }
+        col.addView(sub)
+        fun refreshSubs() {
+            val sel = spinner.selectedItem?.toString() ?: ""
+            val subs = if (sel == NEW_CATEGORY_LABEL) emptyList() else existingSubs(sel)
+            sub.setAdapter(ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, subs))
+        }
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                newCat.visibility = if (entries[pos] == NEW_CATEGORY_LABEL) View.VISIBLE else View.GONE
+                refreshSubs()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) { }
+        }
+        val selIdx = when {
+            currentCat.isNotEmpty() && currentCat in cats -> cats.indexOf(currentCat)
+            cats.isNotEmpty() && currentCat.isEmpty() -> 0
+            else -> entries.size - 1
+        }
+        if (currentCat.isNotEmpty() && currentCat !in cats) newCat.setText(currentCat)
+        spinner.setSelection(selIdx)
+        newCat.visibility = if (entries[selIdx] == NEW_CATEGORY_LABEL) View.VISIBLE else View.GONE
+        refreshSubs()
+        return PickerRefs(spinner, newCat, sub)
+    }
+
+    private fun pickerCategory(p: PickerRefs): String {
+        val sel = p.spinner.selectedItem?.toString() ?: ""
+        return if (sel == NEW_CATEGORY_LABEL) p.newCat.text.toString().trim() else sel
+    }
+
+    private fun showAddLinkDialog() {
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val nameF = field("Name")
+        val urlF = field("Address (URL)").apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+        }
+        col.addView(nameF)
+        col.addView(urlF)
+        val picker = addCatSubFields(col, "", "")
+        AlertDialog.Builder(this)
+            .setTitle("Add Link")
+            .setView(col)
+            .setPositiveButton("Add") { _, _ ->
+                val name = nameF.text.toString().trim()
+                var url = urlF.text.toString().trim()
+                val cat = pickerCategory(picker)
+                val sub = picker.sub.text.toString().trim()
+                if (name.isEmpty() || url.isEmpty() || cat.isEmpty()) {
+                    toast("A name, an address, and a category are all needed.")
+                    return@setPositiveButton
+                }
+                if (!url.contains("://")) url = "https://$url"
+                setStatus("Adding link…", "links")
+                thread {
+                    try {
+                        val created = Api.linksAdd(this, name, url, cat, sub)
+                        post {
+                            linksItems.add(created)
+                            if (created.cat.isNotEmpty() && created.cat !in linksCategories) {
+                                linksCategories = linksCategories + created.cat
+                            }
+                            linksLoaded = true
+                            renderLinks()
+                            setStatus("Added “${created.name}”.", "links")
+                            toast("Added: ${created.name}")
+                        }
+                    } catch (e: Exception) {
+                        Diag.record(this, "linksAdd", e)
+                        post { setStatus("Add failed: ${e.message}", "links") }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showRenameLinkDialog(item: Api.LinkItem) {
+        val input = field("Name").apply { setText(item.name); setSelection(text.length) }
+        AlertDialog.Builder(this)
+            .setTitle("Rename Link")
+            .setMessage("Only the name changes — the address and its category stay the same.")
+            .setView(input)
+            .setPositiveButton("Rename") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty() || name == item.name) return@setPositiveButton
+                setStatus("Renaming…", "links")
+                thread {
+                    try {
+                        Api.linksRename(this, item.id, name)
+                        post {
+                            val i = linksItems.indexOfFirst { it.id == item.id }
+                            if (i >= 0) linksItems[i] = linksItems[i].copy(name = name)
+                            renderLinks()
+                            setStatus("Renamed to “$name”.", "links")
+                        }
+                    } catch (e: Exception) {
+                        Diag.record(this, "linksRename", e)
+                        post { setStatus("Rename failed: ${e.message}", "links") }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showMoveLinkDialog(item: Api.LinkItem) {
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        col.addView(TextView(this).apply {
+            text = "“${item.name}” moves to the end of the chosen category / subcategory group."
+            textSize = 13f; setTextColor(SUB)
+        })
+        val picker = addCatSubFields(col, item.cat, item.sub)
+        AlertDialog.Builder(this)
+            .setTitle("Move Link")
+            .setView(col)
+            .setPositiveButton("Move") { _, _ ->
+                val cat = pickerCategory(picker)
+                val sub = picker.sub.text.toString().trim()
+                if (cat.isEmpty()) {
+                    toast("A category is needed.")
+                    return@setPositiveButton
+                }
+                if (cat == item.cat && sub == item.sub) return@setPositiveButton
+                setStatus("Moving…", "links")
+                thread {
+                    try {
+                        Api.linksMove(this, item.id, cat, sub)
+                        post {
+                            // The server places it at the END of the target group.
+                            val moved = item.copy(cat = cat, sub = sub)
+                            linksItems.removeAll { it.id == item.id }
+                            val lastIdx = linksItems.indexOfLast { it.cat == cat && it.sub == sub }
+                            if (lastIdx >= 0) linksItems.add(lastIdx + 1, moved) else linksItems.add(moved)
+                            if (cat.isNotEmpty() && cat !in linksCategories) {
+                                linksCategories = linksCategories + cat
+                            }
+                            renderLinks()
+                            setStatus("Moved “${item.name}”.", "links")
+                        }
+                    } catch (e: Exception) {
+                        Diag.record(this, "linksMove", e)
+                        post { setStatus("Move failed: ${e.message}", "links") }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Bulk link move (v1.17): the single-link dialog's construction
+     * (addCatSubFields — Category spinner incl. "New category…" plus
+     * the Subcategory field) applied to the whole checkbox set. The
+     * moves are server-side immediate: Api.linksMove once per selected
+     * link, sequentially on a background thread, in catalog order.
+     * On success the links are reloaded and the set cleared; on the
+     * first failure the loop stops, the catalog is still reloaded (so
+     * the display matches the server, including the links that DID
+     * move), the set is cleared, and the status/toast say how many
+     * moved and that the rest did not. No Save Order is involved.
+     */
+    private fun showBulkMoveLinksDialog() {
+        // Catalog order, not check order, so the sequential moves (and
+        // their end-of-group placements) are deterministic.
+        val selected = linksItems.filter { it.id in linkMoveSelection }
+        if (selected.isEmpty()) {
+            linkMoveSelection.clear()
+            updateMoveButton()
+            return
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        col.addView(TextView(this).apply {
+            text = "${selected.size} links move to the end of the chosen category / subcategory group."
+            textSize = 13f; setTextColor(SUB)
+        })
+        // Prefill the picker only when the whole set shares one
+        // category/subcategory; a mixed set starts from the catalog's
+        // first category, like an add.
+        val sharedCat = if (selected.distinctBy { it.cat }.size == 1) selected.first().cat else ""
+        val sharedSub = if (selected.distinctBy { it.sub }.size == 1) selected.first().sub else ""
+        val picker = addCatSubFields(col, sharedCat, sharedSub)
+        AlertDialog.Builder(this)
+            .setTitle("Move ${selected.size} links")
+            .setView(col)
+            .setPositiveButton("Move") { _, _ ->
+                val cat = pickerCategory(picker)
+                val sub = picker.sub.text.toString().trim()
+                if (cat.isEmpty()) {
+                    toast("A category is needed.")
+                    return@setPositiveButton
+                }
+                if (selected.all { it.cat == cat && it.sub == sub }) return@setPositiveButton
+                val dest = if (sub.isEmpty()) cat else "$cat \u203A $sub"
+                setStatus("Moving\u2026", "links")
+                thread {
+                    var moved = 0
+                    var failure: Exception? = null
+                    for (link in selected) {
+                        try {
+                            Api.linksMove(this, link.id, cat, sub)
+                            moved++
+                        } catch (e: Exception) {
+                            Diag.record(this, "linksMove bulk", e)
+                            failure = e
+                            break
+                        }
+                    }
+                    // Reload in this same thread (mirroring
+                    // refreshLinks' apply block) so the final status
+                    // below is the one that sticks — refreshLinks
+                    // would overwrite it with its own load status.
+                    val reloaded = try { Api.linksList(this) } catch (e: Exception) { null }
+                    val err = failure
+                    val movedCount = moved
+                    post {
+                        linkMoveSelection.clear()
+                        if (reloaded != null) {
+                            val (cats, items) = reloaded
+                            linksCategories = cats
+                            linksItems.clear()
+                            linksItems.addAll(items)
+                            linksLoaded = true
+                            linksDirtyGroups.clear()
+                            if (selectedLinkId != null && items.none { it.id == selectedLinkId }) selectedLinkId = null
+                        }
+                        if (currentType == "links") {
+                            renderLinks()
+                            updateSaveOrder()
+                        }
+                        updateMoveButton()
+                        if (err == null) {
+                            setStatus("Moved $movedCount links to $dest", "links")
+                            toast("Moved $movedCount links to $dest")
+                        } else {
+                            setStatus("Moved $movedCount of ${selected.size} links to $dest \u2014 the rest did not move: ${err.message}", "links")
+                            toast("Moved $movedCount of ${selected.size} links \u2014 the rest did not move.")
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmDeleteLink(item: Api.LinkItem) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete this link?")
+            .setMessage("“${item.name}” will be removed from the links catalog. This cannot be undone from the app.")
+            .setPositiveButton("Delete") { _, _ ->
+                setStatus("Deleting…", "links")
+                thread {
+                    try {
+                        Api.linksDelete(this, item.id)
+                        post {
+                            linksItems.removeAll { it.id == item.id }
+                            if (selectedLinkId == item.id) selectedLinkId = null
+                            linkMoveSelection.remove(item.id)
+                            renderLinks()
+                            setStatus("Deleted “${item.name}”.", "links")
+                        }
+                    } catch (e: Exception) {
+                        Diag.record(this, "linksDelete", e)
+                        post { setStatus("Delete failed: ${e.message}", "links") }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 

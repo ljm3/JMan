@@ -1,6 +1,1 @@
-{
- "versionCode": 10,
- "versionName": "1.9",
- "apk": "media-manager.apk",
- "notes": "New in 1.9: the status line now settles on the real status when loading finishes. Both tabs load at startup, and the tab that finished loading in the background used to keep showing Loading when you switched to it - its finished status is now recorded either way. Everything from 1.8 is included: place memory across all import functions and the common ten-source Add menu."
-}
+{"apk": "media-manager.apk", "notes": "New in 1.18: the action buttons on Photos, Videos, and Audio now match the Links tab - same text size and even sizing across all four buttons, so Move Selected fits on one line.", "versionCode": 19, "versionName": "1.18"}
