@@ -1,0 +1,5 @@
+Unzipped Projects Summary Budget to Actual 2026.zip
+Built 2026-11-18 18:48 from Projects Summary Budget to Actual 2026.xlsx
+  Months: Jan–Oct 2026   Revenue $1,533,795   P&L $418,805
+  Banks: 225   Ticket exports: September (747 tickets)   Time studies: 19
+Saved: C:\Users\jmanganiello\.local\bin\ms-dashboard\Managed Services Dashboard.html

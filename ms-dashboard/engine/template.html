@@ -1,0 +1,656 @@
+<title>Managed Services Performance 2026</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: sticky header with tab bar + one filter row; each tab is a grid of panels that collapses to one column on phones. */
+:root{
+  --page:#f4f5f6; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#7d7b75; --grid:#e3e3dd; --axis:#c3c2b7;
+  --line:rgba(11,11,11,.10); --accent:#256abf; --accent-wash:#e6effb;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#6250d6; --s8:#e34948; --sN:#a9a8a1;
+  --good:#0ca30c; --good-ink:#006300; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --h0:#cde2fb; --h1:#9ec5f4; --h2:#6da7ec; --h3:#3987e5; --h4:#256abf; --h5:#184f95; --h6:#0d366b;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0f0f0e; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --muted:#8f8d86; --grid:#2c2c2a; --axis:#45453f;
+  --line:rgba(255,255,255,.10); --accent:#6da7ec; --accent-wash:#1b2a3d;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#0ca30c; --s7:#9085e9; --s8:#e66767; --sN:#5e5d58;
+  --good-ink:#0ca30c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#0f0f0e; --surface:#1a1a19; --ink:#f0efec; --ink-2:#c3c2b7; --muted:#8f8d86; --grid:#2c2c2a; --axis:#45453f;
+  --line:rgba(255,255,255,.10); --accent:#6da7ec; --accent-wash:#1b2a3d;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#0ca30c; --s7:#9085e9; --s8:#e66767; --sN:#5e5d58;
+  --good-ink:#0ca30c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.titlebar{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;padding-block:14px 6px}
+.titlebar h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs a{flex:0 0 auto;padding:9px 12px 10px;color:var(--ink-2);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
+nav.tabs a:hover{color:var(--ink)}
+nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.filters{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding-block:12px}
+.filters label{font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+select,input[type=search],input[type=number]{font:inherit;font-size:13px;color:var(--ink);background:var(--surface);border:1px solid var(--axis);border-radius:6px;padding:5px 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:12px;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--axis);background:var(--surface);color:var(--ink-2);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent-wash);border-color:var(--accent);color:var(--ink)}
+.chip i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.scope{font-size:12px;color:var(--muted)}
+main{padding-block:20px 48px}
+section.tab{display:grid;gap:16px}
+.row{display:grid;gap:16px;grid-template-columns:repeat(12,minmax(0,1fr))}
+.c12{grid-column:span 12}.c8{grid-column:span 8}.c7{grid-column:span 7}.c6{grid-column:span 6}.c5{grid-column:span 5}.c4{grid-column:span 4}.c3{grid-column:span 3}
+@media (max-width:980px){.c8,.c7,.c6,.c5,.c4{grid-column:span 12}.c3{grid-column:span 6}}
+@media (max-width:520px){.c3{grid-column:span 12}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.panel h2{font-size:15px;font-weight:600;margin:0 0 2px;text-wrap:balance}
+.panel .sub{color:var(--ink-2);font-size:12.5px;margin:0 0 12px;max-width:75ch}
+.tile .label{font-size:12.5px;color:var(--ink-2)}
+.tile .val{font-size:28px;font-weight:600;letter-spacing:-.02em;margin-top:4px}
+.tile .note{font-size:12px;color:var(--muted);margin-top:2px}
+.hero .val{font-size:48px;line-height:1.05}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2);margin:0 0 8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.legend i.ln{height:2px;width:14px;border-radius:1px}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;overflow:visible}
+.chart text{font-family:var(--sans);font-size:11px;fill:var(--muted)}
+.chart .vlab{fill:var(--ink-2);font-size:11px}
+.hb{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:6px 10px;align-items:center;font-size:12.5px}
+.hb .l{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb .t{height:12px;position:relative}
+.hb .b{position:absolute;top:0;height:12px;border-radius:0 3px 3px 0}
+.hb .b.neg{border-radius:3px 0 0 3px}
+.hb .z{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--axis)}
+.hb .v{font-variant-numeric:tabular-nums;color:var(--ink-2);text-align:right;min-width:56px}
+.hb .rowhit{display:contents}
+.tbl-wrap{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
+th{font-weight:600;color:var(--ink-2);font-size:11.5px;position:sticky;top:0;background:var(--surface)}
+th button{all:unset;cursor:pointer}
+th button:hover{color:var(--ink)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr:hover td{background:var(--accent-wash)}
+.heat td{text-align:center;font-variant-numeric:tabular-nums;border:2px solid var(--surface);border-radius:3px;min-width:44px}
+.heat th{text-align:center}
+.heat th:first-child,.heat td:first-child{text-align:left;background:none}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c)}
+.p-good{--c:var(--good)}.p-warn{--c:var(--warn)}.p-crit{--c:var(--crit)}.p-ser{--c:var(--serious)}
+.findings{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.findings li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start}
+.findings li .pill{margin-top:1px}
+.findings b{font-weight:600}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.mono{font-family:var(--mono)}
+.flex{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:inherit;font-size:12.5px;padding:5px 12px;border-radius:6px;border:1px solid var(--axis);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn:hover{background:var(--accent-wash)}
+.slider{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;margin-bottom:12px}
+.slider label{font-size:13px}
+.slider output{font-variant-numeric:tabular-nums;font-weight:600;min-width:52px;text-align:right}
+.slider input{grid-column:1/-1;width:100%;accent-color:var(--accent)}
+.slider .hint{grid-column:1/-1;font-size:11.5px;color:var(--muted);margin-top:-2px}
+.cmp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:520px){.cmp{grid-template-columns:1fr}}
+.delta-up{color:var(--good-ink)}.delta-down{color:var(--crit)}
+.gantt-row{display:grid;grid-template-columns:minmax(110px,170px) 1fr;gap:10px;align-items:center;margin-bottom:6px;font-size:12px}
+.gantt-track{position:relative;height:16px;background:var(--grid);border-radius:3px;overflow:hidden}
+.gantt-track span{position:absolute;top:0;bottom:0;cursor:default}
+.gantt-axis{position:relative;height:16px;margin-left:calc(min(170px,30%) + 10px)}
+.gantt-axis span{position:absolute;font-size:10.5px;color:var(--muted);transform:translateX(-50%)}
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.14);border-radius:8px;padding:8px 10px;font-size:12px;min-width:140px;max-width:300px}
+#tip .tt{font-weight:600;margin-bottom:4px;color:var(--ink-2);font-size:11.5px}
+#tip .tr{display:grid;grid-template-columns:14px auto 1fr;gap:6px;align-items:center}
+#tip .tr i{height:2px;width:12px;border-radius:1px}
+#tip .tr b{font-variant-numeric:tabular-nums}
+#tip .tr span{color:var(--ink-2)}
+.dq{display:grid;gap:0}
+.dq > div{display:grid;grid-template-columns:110px 1fr;gap:12px;padding:12px 0;border-bottom:1px solid var(--grid)}
+.dq h3{font-size:13.5px;margin:0 0 3px;font-weight:600}
+.dq p{margin:0;color:var(--ink-2);font-size:12.5px;max-width:90ch}
+@media (max-width:520px){.dq > div{grid-template-columns:1fr}}
+.foot{color:var(--muted);font-size:12px;padding-block:8px 32px}
+@media (prefers-reduced-motion:no-preference){.panel{transition:opacity .2s}}
+.dim{opacity:.55}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="titlebar">
+      <h1>Managed Services Performance</h1>
+      <span class="eyebrow" id="eyebrow"></span>
+    </div>
+    <nav class="tabs" aria-label="Dashboard sections" id="tabs"></nav>
+  </div>
+</header>
+<div class="wrap">
+  <div class="filters" id="filters">
+    <label for="mFrom">From <select id="mFrom"></select></label>
+    <label for="mTo">To <select id="mTo"></select></label>
+    <div class="chips" id="typeChips" role="group" aria-label="Support types"></div>
+    <span class="scope" id="scope"></span>
+  </div>
+</div>
+<main class="wrap" id="main"></main>
+<div class="wrap foot"><span id="srcline"></span> Overhead (unallocated salaries, contractors, commissions, non-billable, hardware and admin time) is allocated to Help Desk, Installs and Project by ticket hours to give loaded P&amp;L. Requester names, end-customer company names, ticket subjects, serial numbers and time-study free-text notes are not included.</div>
+<div id="tip" hidden></div>
+
+<script type="application/json" id="data">/*DATA*/</script>
+<script>
+"use strict";
+const D = JSON.parse(document.getElementById("data").textContent);
+const META = D.meta || {};
+const M = META.months;
+const TKM = META.tkMonth || "";
+const TKS = TKM ? TKM.slice(0,3) : "—";
+const span = a => a.length ? (a.length===1 ? a[0] : `${a[0]}–${a[a.length-1]}`) : "none";
+const fmtDay = s => { if(!s) return ""; const [y,m,d]=s.split("-").map(Number); return `${d} ${M_ALL[m-1]}`; };
+const M_ALL = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const BILL = ["Help Desk","Installs","Project"];
+const TYPE_COLOR = {"Help Desk":"var(--s1)","Installs":"var(--s2)","Project":"var(--s3)"};
+const TECHS = Object.keys(D.people).filter(p => D.people[p].pos === "Technician");
+const S = {from:0, to:M.length-1, types:new Set(BILL), tab:"overview"};
+
+/* ---------- formatting ---------- */
+const nf0 = new Intl.NumberFormat("en-US",{maximumFractionDigits:0});
+const nf1 = new Intl.NumberFormat("en-US",{maximumFractionDigits:1, minimumFractionDigits:1});
+function money(v, full){ const a=Math.abs(v), s=v<0?"−":""; if(full) return s+"$"+nf0.format(a);
+  if(a>=1e6) return s+"$"+(a/1e6).toFixed(2)+"M"; if(a>=1e4) return s+"$"+nf0.format(a/1e3)+"K"; return s+"$"+nf0.format(a); }
+const pct = (v,d=0) => (isFinite(v)? (v*100).toFixed(d)+"%" : "–");
+const hrs = v => nf0.format(v)+" h";
+const num = v => nf0.format(v);
+const sum = (a,f=x=>x) => a.reduce((s,x)=>s+(+f(x)||0),0);
+const inRange = m => m>=S.from && m<=S.to;
+const nMonths = () => S.to-S.from+1;
+function el(tag, attrs={}, ...kids){ const e=document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs)){ if(k==="class") e.className=v; else if(k==="text") e.textContent=v; else if(k==="html") e.innerHTML=v; else if(k.startsWith("on")) e.addEventListener(k.slice(2),v); else if(v!==null&&v!==undefined) e.setAttribute(k,v); }
+  for(const k of kids.flat()){ if(k==null) continue; e.append(k.nodeType?k:document.createTextNode(k)); } return e; }
+function panel(cls, title, sub, ...body){ return el("div",{class:"panel "+cls}, title?el("h2",{text:title}):null, sub?el("p",{class:"sub",text:sub}):null, ...body); }
+function tile(cls,label,val,note){ return el("div",{class:"panel tile "+cls}, el("div",{class:"label",text:label}), el("div",{class:"val",text:val}), note?el("div",{class:"note",text:note}):null); }
+function legend(items, line){ return el("div",{class:"legend"}, items.map(([n,c,ln])=>el("span",{}, el("i",{class:(ln||line)?"ln":"",style:"background:"+c}), n))); }
+function pill(level, text){ const map={good:"p-good",warn:"p-warn",crit:"p-crit",ser:"p-ser"}; return el("span",{class:"pill "+map[level],text}); }
+
+/* ---------- tooltip ---------- */
+const TIP = document.getElementById("tip");
+function showTip(ev, title, rows){
+  TIP.replaceChildren(el("div",{class:"tt",text:title}), ...rows.map(([n,v,c])=>el("div",{class:"tr"}, el("i",{style:"background:"+(c||"transparent")}), el("b",{text:v}), el("span",{text:n}))));
+  TIP.hidden=false; const r=TIP.getBoundingClientRect();
+  let x = (ev.clientX ?? 0)+14, y=(ev.clientY ?? 0)+14;
+  if(ev.type==="focus"){ const b=ev.target.getBoundingClientRect(); x=b.right+8; y=b.top; }
+  if(x+r.width>innerWidth-8) x=(ev.clientX??innerWidth)-r.width-14; if(y+r.height>innerHeight-8) y=innerHeight-r.height-8;
+  TIP.style.left=Math.max(8,x)+"px"; TIP.style.top=Math.max(8,y)+"px"; }
+const hideTip = () => TIP.hidden=true;
+function hover(node, title, rows){ node.setAttribute("tabindex","0");
+  const f=e=>showTip(e, typeof title==="function"?title():title, typeof rows==="function"?rows():rows);
+  node.addEventListener("pointermove",f); node.addEventListener("focus",f); node.addEventListener("pointerleave",hideTip); node.addEventListener("blur",hideTip); }
+
+/* ---------- charts ---------- */
+const NS="http://www.w3.org/2000/svg";
+function sv(tag, a={}){ const e=document.createElementNS(NS,tag); for(const [k,v] of Object.entries(a)) e.setAttribute(k,v); return e; }
+function niceTicks(lo, hi, n=4){ if(lo===hi){hi=lo+1;} const span=hi-lo, step0=span/n, mag=10**Math.floor(Math.log10(step0)), r=step0/mag;
+  const step=(r<=1?1:r<=2?2:r<=2.5?2.5:r<=5?5:10)*mag; const a=Math.floor(lo/step)*step, b=Math.ceil(hi/step)*step; const t=[]; for(let v=a; v<=b+step/2; v+=step) t.push(+v.toFixed(10)); return t; }
+function barPath(x,y0,w,y1,rad){ // rounded at data end, square at baseline
+  const up = y1<y0, h=Math.abs(y1-y0); const r=Math.min(rad,h,w/2); if(h<0.5) return "";
+  if(up) return `M${x},${y0}V${y1+r}Q${x},${y1} ${x+r},${y1}H${x+w-r}Q${x+w},${y1} ${x+w},${y1+r}V${y0}Z`;
+  return `M${x},${y0}V${y1-r}Q${x},${y1} ${x+r},${y1}H${x+w-r}Q${x+w},${y1} ${x+w},${y1-r}V${y0}Z`; }
+/* columns: cats[], series[{name,color,vals}], stacked, line:{name,color,vals}, fmt */
+function colChart(host, o){
+  const W=Math.max(280, host.clientWidth||600), H=o.h||230, padL=52, padR=10, padT=10, padB=26;
+  const series=o.series, cats=o.cats, fmt=o.fmt||money;
+  let lo=0, hi=0;
+  cats.forEach((_,i)=>{ if(o.stacked){ let p=0,n=0; series.forEach(s=>{const v=s.vals[i]||0; v>=0?p+=v:n+=v;}); hi=Math.max(hi,p); lo=Math.min(lo,n);} else series.forEach(s=>{hi=Math.max(hi,s.vals[i]||0); lo=Math.min(lo,s.vals[i]||0);}); });
+  if(o.line) o.line.vals.forEach(v=>{hi=Math.max(hi,v); lo=Math.min(lo,v);});
+  const ticks=niceTicks(lo,hi,4); const yMin=ticks[0], yMax=ticks[ticks.length-1];
+  const y=v=>padT+(H-padT-padB)*(1-(v-yMin)/(yMax-yMin)); const band=(W-padL-padR)/cats.length;
+  const svg=sv("svg",{viewBox:`0 0 ${W} ${H}`,height:H,role:"img","aria-label":o.label||""});
+  ticks.forEach(t=>{ svg.append(sv("line",{x1:padL,x2:W-padR,y1:y(t),y2:y(t),stroke:t===0?"var(--axis)":"var(--grid)","stroke-width":1}));
+    const tx=sv("text",{x:padL-6,y:y(t)+4,"text-anchor":"end"}); tx.textContent=(o.tickFmt||fmt)(t); svg.append(tx); });
+  const step=Math.max(1,Math.ceil(cats.length/(W/46)));
+  cats.forEach((c,i)=>{ if(i%step) return; const tx=sv("text",{x:padL+band*i+band/2,y:H-8,"text-anchor":"middle"}); tx.textContent=c; svg.append(tx); });
+  const groups=o.stacked?1:series.length; const bw=Math.min(24, (band*0.7)/groups);
+  cats.forEach((c,i)=>{ const g=sv("g"); const x0=padL+band*i+(band-bw*groups-(groups-1)*2)/2;
+    if(o.stacked){ let p=0,n=0; series.forEach((s,si)=>{ const v=s.vals[i]||0; if(!v) return; const base=v>=0?p:n, top=base+v; v>=0?p=top:n=top;
+        const isEnd = v>=0 ? !series.slice(si+1).some(t=>(t.vals[i]||0)>0) : !series.slice(si+1).some(t=>(t.vals[i]||0)<0);
+        let y0=y(base), y1=y(top); if(base!==0) y0+= (v>=0?-1:1); if(!isEnd) y1+= (v>=0?1:-1);
+        const d=isEnd?barPath(x0,y0,bw,y1,4):`M${x0},${y0}V${y1}H${x0+bw}V${y0}Z`; if(d) g.append(sv("path",{d,fill:s.color})); }); }
+    else series.forEach((s,si)=>{ const v=s.vals[i]||0; const d=barPath(x0+si*(bw+2),y(0),bw,y(v),4); if(d) g.append(sv("path",{d,fill:s.color})); });
+    const hit=sv("rect",{x:padL+band*i,y:padT,width:band,height:H-padT-padB,fill:"transparent"}); g.append(hit); svg.append(g);
+    hover(hit, (o.catTitle||(x=>x))(c), ()=>[...series.map(s=>[s.name, fmt(s.vals[i]||0), s.color]), ...(o.line?[[o.line.name, fmt(o.line.vals[i]), o.line.color]]:[]), ...((o.extra&&o.extra(i))||[])]);
+    hit.addEventListener("pointerenter",()=>g.style.opacity=.8); hit.addEventListener("pointerleave",()=>g.style.opacity=1); });
+  if(o.line){ const pts=o.line.vals.map((v,i)=>[padL+band*i+band/2,y(v)]);
+    svg.append(sv("path",{d:"M"+pts.map(p=>p.join(",")).join("L"),fill:"none",stroke:o.line.color,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round","pointer-events":"none"}));
+    pts.forEach(p=>svg.append(sv("circle",{cx:p[0],cy:p[1],r:4,fill:o.line.color,stroke:"var(--surface)","stroke-width":2,"pointer-events":"none"})));
+    const lp=pts[pts.length-1]; const tx=sv("text",{x:Math.min(lp[0],W-padR-2),y:lp[1]-10,"text-anchor":"end",class:"vlab"}); tx.textContent=fmt(o.line.vals[o.line.vals.length-1]); svg.append(tx); }
+  host.replaceChildren(svg); }
+/* line chart, multiple series, crosshair */
+function lineChart(host, o){
+  const W=Math.max(280, host.clientWidth||600), H=o.h||220, padL=46, padR=12, padT=12, padB=26, fmt=o.fmt||pct;
+  const all=o.series.flatMap(s=>s.vals.filter(v=>v!=null)); const ticks=niceTicks(Math.min(0,...all), Math.max(...all),4);
+  const yMin=ticks[0], yMax=ticks.at(-1); const n=o.cats.length; const x=i=>padL+(W-padL-padR)*(n===1?0.5:i/(n-1)); const y=v=>padT+(H-padT-padB)*(1-(v-yMin)/(yMax-yMin));
+  const svg=sv("svg",{viewBox:`0 0 ${W} ${H}`,height:H,role:"img","aria-label":o.label||""});
+  ticks.forEach(t=>{ svg.append(sv("line",{x1:padL,x2:W-padR,y1:y(t),y2:y(t),stroke:t===0?"var(--axis)":"var(--grid)"})); const tx=sv("text",{x:padL-6,y:y(t)+4,"text-anchor":"end"}); tx.textContent=fmt(t); svg.append(tx); });
+  o.cats.forEach((c,i)=>{ const tx=sv("text",{x:x(i),y:H-8,"text-anchor":"middle"}); tx.textContent=c; svg.append(tx); });
+  o.series.forEach(s=>{ const pts=s.vals.map((v,i)=>v==null?null:[x(i),y(v)]).filter(Boolean); if(!pts.length) return;
+    if(s.area) svg.append(sv("path",{d:`M${pts[0][0]},${y(0)}L`+pts.map(p=>p.join(",")).join("L")+`L${pts.at(-1)[0]},${y(0)}Z`,fill:s.color,opacity:.1}));
+    svg.append(sv("path",{d:"M"+pts.map(p=>p.join(",")).join("L"),fill:"none",stroke:s.color,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"}));
+    const lp=pts.at(-1); svg.append(sv("circle",{cx:lp[0],cy:lp[1],r:4,fill:s.color,stroke:"var(--surface)","stroke-width":2})); });
+  const cross=sv("line",{y1:padT,y2:H-padB,stroke:"var(--axis)","stroke-width":1,visibility:"hidden"}); svg.append(cross);
+  const hit=sv("rect",{x:padL,y:padT,width:W-padL-padR,height:H-padT-padB,fill:"transparent"}); svg.append(hit);
+  let idx=0; hover(hit, ()=>o.cats[idx], ()=>o.series.map(s=>[s.name, s.vals[idx]==null?"–":fmt(s.vals[idx]), s.color]));
+  hit.addEventListener("pointermove",e=>{ const r=svg.getBoundingClientRect(); const px=(e.clientX-r.left)*W/r.width; idx=Math.max(0,Math.min(n-1,Math.round((px-padL)/((W-padL-padR)/(n-1||1))))); cross.setAttribute("x1",x(idx)); cross.setAttribute("x2",x(idx)); cross.setAttribute("visibility","visible"); showTip(e,o.cats[idx],o.series.map(s=>[s.name, s.vals[idx]==null?"–":fmt(s.vals[idx]), s.color])); });
+  hit.addEventListener("pointerleave",()=>cross.setAttribute("visibility","hidden"));
+  host.replaceChildren(svg); }
+/* horizontal bars (HTML) items:[{label,v,color,tip}] */
+function hbars(host, items, o={}){
+  const fmt=o.fmt||money; const max=Math.max(...items.map(i=>Math.abs(i.v)),1e-9); const hasNeg=items.some(i=>i.v<0);
+  const negMax=hasNeg?Math.max(...items.filter(i=>i.v<0).map(i=>-i.v)):0; const posMax=Math.max(0,...items.filter(i=>i.v>0).map(i=>i.v));
+  const zero=hasNeg? negMax/(negMax+posMax)*100 : 0; const scale=hasNeg? 100/(negMax+posMax) : 100/max;
+  const g=el("div",{class:"hb"});
+  items.forEach(it=>{ const t=el("div",{class:"t"}); if(hasNeg) t.append(el("span",{class:"z",style:`left:${zero}%`}));
+    const w=Math.abs(it.v)*scale; const b=el("span",{class:"b"+(it.v<0?" neg":""),style:`background:${it.color||"var(--s1)"};width:${w}%;left:${it.v<0?zero-w:zero}%`}); t.append(b);
+    const l=el("div",{class:"l",text:it.label,title:it.label}); const v=el("div",{class:"v",text:it.vtext||fmt(it.v)});
+    g.append(l,t,v); hover(t, it.label, it.tip||[[o.name||"Value", fmt(it.v), it.color||"var(--s1)"]]); });
+  host.replaceChildren(g); }
+/* stacked 100% horizontal rows: rows:[{label, parts:[{name,v,color}]}] */
+function stackRows(host, rows, o={}){
+  const g=el("div",{class:"hb",style:"grid-template-columns:minmax(90px,30%) 1fr auto"});
+  rows.forEach(r=>{ const tot=sum(r.parts,p=>p.v)||1; const t=el("div",{class:"t",style:"display:flex;gap:2px"});
+    r.parts.forEach(p=>{ if(p.v<=0) return; const s=el("span",{style:`position:static;display:block;height:12px;flex:0 0 calc(${p.v/tot*100}% - 2px);background:${p.color};border-radius:2px`}); t.append(s);
+      hover(s, r.label, [[p.name, (o.fmt||hrs)(p.v)+" · "+pct(p.v/tot), p.color]]); });
+    g.append(el("div",{class:"l",text:r.label,title:r.label}), t, el("div",{class:"v",text:r.right??(o.fmt||hrs)(tot)})); });
+  host.replaceChildren(g); }
+/* heatmap table */
+const RAMP=["--h0","--h1","--h2","--h3","--h4","--h5","--h6"];
+function heat(host, rowL, colL, mat, fmt, o={}){
+  const vals=mat.flat().filter(v=>v!=null&&isFinite(v)); const lo=o.min??Math.min(...vals), hi=o.max??Math.max(...vals);
+  const t=el("table",{class:"heat"}); t.append(el("thead",{},el("tr",{},el("th",{text:o.corner||""}),colL.map(c=>el("th",{text:c})))));
+  const tb=el("tbody"); rowL.forEach((r,i)=>{ const tr=el("tr",{},el("td",{text:r}));
+    colL.forEach((c,j)=>{ const v=mat[i][j]; const td=el("td",{text:v==null||!isFinite(v)?"":fmt(v)});
+      if(v!=null&&isFinite(v)){ const k=Math.max(0,Math.min(6,Math.round((v-lo)/((hi-lo)||1)*6))); td.style.background=`var(${RAMP[k]})`; td.style.color=k>=4?"#fff":"#0b0b0b"; hover(td, r+" · "+c, [[o.name||"Value", fmt(v), `var(${RAMP[k]})`]]); }
+      tr.append(td); }); tb.append(tr); }); t.append(tb); host.replaceChildren(el("div",{class:"tbl-wrap"},t)); }
+/* sortable table */
+function table(host, cols, rows, o={}){
+  let sortK=o.sort||cols[0].k, dir=o.dir||-1, limit=o.page||rows.length, q="";
+  const wrap=el("div"); const tools=el("div",{class:"flex",style:"margin-bottom:8px"}); const body=el("div",{class:"tbl-wrap",style:o.maxH?`max-height:${o.maxH}px;overflow:auto`:""});
+  if(o.search){ const s=el("input",{type:"search",placeholder:o.search,"aria-label":o.search,id:o.id?o.id+"-q":null}); s.addEventListener("input",()=>{q=s.value.toLowerCase(); draw();}); tools.append(s); }
+  const more=el("button",{class:"btn",text:"Show all"}); more.addEventListener("click",()=>{limit=limit===rows.length?o.page:rows.length; draw();});
+  function draw(){ let r=rows.filter(x=>!q||cols.some(c=>String(x[c.k]??"").toLowerCase().includes(q)));
+    r.sort((a,b)=>{ const x=a[sortK], y=b[sortK]; return (typeof x==="number"&&typeof y==="number")? (x-y)*dir : String(x??"").localeCompare(String(y??""))*dir; });
+    const shown=r.slice(0,limit); const t=el("table"); const tr=el("tr");
+    cols.forEach(c=>{ const b=el("button",{text:c.label+(sortK===c.k?(dir<0?" ↓":" ↑"):"")}); b.addEventListener("click",()=>{ if(sortK===c.k) dir=-dir; else {sortK=c.k; dir=c.num?-1:1;} draw(); }); tr.append(el("th",{class:c.num?"n":"",title:c.title||null},b)); });
+    t.append(el("thead",{},tr)); const tb=el("tbody");
+    shown.forEach(x=>{ const row=el("tr"); cols.forEach(c=>{ const v=x[c.k]; const td=el("td",{class:c.num?"n":""}); const out=c.render?c.render(v,x):(c.fmt?c.fmt(v):v); if(out&&out.nodeType) td.append(out); else td.textContent=out??""; row.append(td); }); tb.append(row); });
+    t.append(tb); body.replaceChildren(t);
+    more.textContent = limit<r.length? `Show all ${r.length}` : (o.page&&r.length>o.page?"Show fewer":""); more.hidden=!(o.page&&r.length>o.page); }
+  if(o.page) tools.append(more); wrap.append(tools, body); host.replaceChildren(wrap); draw(); }
+function chartBox(h){ return el("div",{class:"chart",style:h?`min-height:${h}px`:""}); }
+const deferred=[]; function later(fn){ deferred.push(fn); }
+
+/* ---------- derived data ---------- */
+function finance(){
+  const rows=D.finMonthly.filter(r=>inRange(r.m));
+  const months=[...Array(nMonths())].map((_,i)=>S.from+i);
+  const byM=months.map(m=>{ const R=rows.filter(r=>r.m===m); const bill=R.filter(r=>BILL.includes(r.t)), sel=bill.filter(r=>S.types.has(r.t));
+    const over=-sum(R.filter(r=>!BILL.includes(r.t)),r=>r.pl); const bh=sum(bill,r=>r.hrs), sh=sum(sel,r=>r.hrs);
+    const alloc= bh? over*sh/bh : 0;
+    const t={m, rev:sum(sel,r=>r.rev), direct:sum(sel,r=>r.pl), hrs:sh, over, alloc, billH:bh, all:{rev:sum(R,r=>r.rev), pl:sum(R,r=>r.pl)}};
+    t.loaded=t.direct-alloc; BILL.forEach(ty=>{ const x=bill.filter(r=>r.t===ty); t[ty]={rev:sum(x,r=>r.rev),pl:sum(x,r=>r.pl),hrs:sum(x,r=>r.hrs),tech:sum(x,r=>r.tech),con:sum(x,r=>r.con)}; t[ty].alloc= bh? over*t[ty].hrs/bh:0; });
+    t.cost={emp:-sum(R,r=>r.emp),con:-sum(R,r=>r.con),tech:-sum(R,r=>r.tech),oth:-sum(R,r=>r.oth),com:-sum(R,r=>r.com)}; return t; });
+  const tot={rev:sum(byM,x=>x.rev),direct:sum(byM,x=>x.direct),loaded:sum(byM,x=>x.loaded),hrs:sum(byM,x=>x.hrs),over:sum(byM,x=>x.over),alloc:sum(byM,x=>x.alloc)};
+  const types=BILL.map(ty=>{ const r=sum(byM,x=>x[ty].rev), p=sum(byM,x=>x[ty].pl), a=sum(byM,x=>x[ty].alloc), h=sum(byM,x=>x[ty].hrs); return {t:ty,rev:r,direct:p,alloc:a,loaded:p-a,hrs:h,dm:p/r,lm:(p-a)/r,rph:r/h}; });
+  const cost={}; ["emp","con","tech","oth","com"].forEach(k=>cost[k]=sum(byM,x=>x.cost[k]));
+  return {byM,tot,types,cost,months};
+}
+function overheadRate(){ const F=finance(); return F.tot.over / (sum(F.byM,x=>x.billH)||1); }
+function customers(){
+  const rate=overheadRate(); const out=[];
+  for(const [org,L] of Object.entries(D.cust)){ const x=L.filter(r=>inRange(r[0]) && (S.types.has(r[1]) || !BILL.includes(r[1])));
+    const bill=x.filter(r=>BILL.includes(r[1])); if(!x.length) continue;
+    const rev=sum(bill,r=>r[2]), pl=sum(bill,r=>r[3]), h=sum(bill,r=>r[4]), nb=sum(x.filter(r=>!BILL.includes(r[1])),r=>r[4]), n=sum(x,r=>r[6]);
+    if(!rev && !h && !nb) continue;
+    const loaded=pl - h*rate; out.push({org,rev,pl,h,nb,n,loaded,margin:rev?loaded/rev:null,rph:h?rev/h:null}); }
+  return out; }
+function techStats(){
+  const o={}; const add=(p)=>o[p]??={who:p,pos:(D.people[p]||{}).pos||"Other",worked:0,paid:0,ot:0,pto:0,call:0,bill:0,rev:0,pl:0,n:0,byT:{},byM:{}};
+  D.ts.forEach(([p,m,pt,h])=>{ if(!inRange(m)) return; const t=add(p); t.paid+=h; if(pt==="REGULAR"||pt==="OVERTIME") t.worked+=h; if(pt==="OVERTIME") t.ot+=h; if(["VACATION","SICK","FLOAT","BEREAV"].includes(pt)) t.pto+=h; (t.byM[m]??={w:0,c:0}).w+= (pt==="REGULAR"||pt==="OVERTIME")?h:0; });
+  D.tech.forEach(([p,m,ty,rev,pl,h,lab,n])=>{ if(!inRange(m)) return; if(BILL.includes(ty)&&!S.types.has(ty)) return; const t=add(p); t.call+=h; if(BILL.includes(ty)) t.bill+=h; t.rev+=rev; t.pl+=pl; t.n+=n; t.byT[ty]=(t.byT[ty]||0)+h; (t.byM[m]??={w:0,c:0}).c+=h; });
+  Object.values(o).forEach(t=>{ t.util=t.worked?t.call/t.worked:null; t.butil=t.worked?t.bill/t.worked:null; t.rpw=t.worked?t.rev/t.worked:null; });
+  return o; }
+const TK = D.tickets.map(r=>({type:r[0],org:r[1],who:r[2],prob:r[3],res:r[4],scan:r[5],os:r[6],br:r[7],sw:r[8],h:r[9],days:r[10]}));
+function countBy(a,f){ const m=new Map(); a.forEach(x=>{const k=f(x)||"(blank)"; m.set(k,(m.get(k)||0)+1);}); return [...m].sort((a,b)=>b[1]-a[1]); }
+const median = a => { const s=[...a].filter(v=>v!=null).sort((x,y)=>x-y); if(!s.length) return null; const h=s.length>>1; return s.length%2?s[h]:(s[h-1]+s[h])/2; };
+const short = s => s.replace(/^[^:]+::/,"");
+
+/* ---------- tabs ---------- */
+const TABS=[["overview","Overview"],["finance","Financials"],["customers","Customers"],["team","Team & utilization"],["tickets",`Tickets (${TKS})`],["timestudy","Time study"],["scorecard","Scorecard"],["scenarios","What-if"],["quality","Data quality"]];
+const SCOPE={overview:"Filters apply to every figure on this tab.",finance:"Filters apply to every figure on this tab.",customers:"Filters apply to every figure on this tab.",team:"Month filter applies; support-type filter scopes ticket hours and revenue.",tickets:TKM?`${TKM} ticket exports only; filters do not apply.`:"No ticket exports in the workbook.",timestudy:META.studyRange?`Observed days ${fmtDay(META.studyRange[0])} – ${fmtDay(META.studyRange[1])}; filters do not apply.`:"No time studies found.",scorecard:"Month and support-type filters apply to finance and hours columns. Ticket and time-study columns are fixed samples.",scenarios:"Baseline uses the selected months, annualized to 12 months.",quality:"Checks run on the full workbook."};
+document.getElementById("eyebrow").textContent = `${META.year} year to date · ${span(M)} actuals · refreshed ${META.built}`;
+document.getElementById("srcline").textContent = `Source: ${META.workbook} and ${META.studyCount} time-study workbook${META.studyCount===1?"":"s"}, refreshed ${META.built}.`;
+const nav=document.getElementById("tabs");
+TABS.forEach(([id,label])=>nav.append(el("a",{href:"#"+id,"data-id":id,text:label})));
+const fFrom=document.getElementById("mFrom"), fTo=document.getElementById("mTo");
+M.forEach((m,i)=>{ fFrom.append(el("option",{value:i,text:m})); fTo.append(el("option",{value:i,text:m})); }); fTo.value=M.length-1;
+fFrom.addEventListener("change",()=>{S.from=+fFrom.value; if(S.from>S.to){S.to=S.from; fTo.value=S.to;} render();});
+fTo.addEventListener("change",()=>{S.to=+fTo.value; if(S.to<S.from){S.from=S.to; fFrom.value=S.from;} render();});
+const chipBox=document.getElementById("typeChips");
+BILL.forEach(t=>{ const b=el("button",{class:"chip","aria-pressed":"true"},el("i",{style:"background:"+TYPE_COLOR[t]}),t);
+  b.addEventListener("click",()=>{ if(S.types.has(t)){ if(S.types.size===1) return; S.types.delete(t);} else S.types.add(t); b.setAttribute("aria-pressed",S.types.has(t)); render(); }); chipBox.append(b); });
+function route(){ const h=location.hash.slice(1); S.tab=TABS.some(t=>t[0]===h)?h:"overview"; render(); }
+addEventListener("hashchange",route);
+let rz; addEventListener("resize",()=>{clearTimeout(rz); rz=setTimeout(render,150);});
+
+const MAIN=document.getElementById("main");
+function render(){
+  nav.querySelectorAll("a").forEach(a=>{ if(a.dataset.id===S.tab) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  document.getElementById("scope").textContent=SCOPE[S.tab];
+  const off = ["tickets","timestudy","quality"].includes(S.tab); document.getElementById("filters").classList.toggle("dim",off);
+  deferred.length=0; const sec=el("section",{class:"tab"}); VIEWS[S.tab](sec); MAIN.replaceChildren(sec); deferred.forEach(f=>f()); hideTip(); }
+
+/* ---------- views ---------- */
+const VIEWS={};
+const period = () => S.from===S.to? M[S.from] : `${M[S.from]}–${M[S.to]}`;
+
+VIEWS.overview = sec => {
+  const F=finance(), T=techStats(); const techs=TECHS.map(p=>T[p]).filter(Boolean);
+  const util=sum(techs,t=>t.call)/sum(techs,t=>t.worked); const allSel=S.types.size===3;
+  sec.append(el("div",{class:"row"},
+    el("div",{class:"panel tile hero c4"}, el("div",{class:"label",text:`Revenue · ${period()}`}), el("div",{class:"val",text:money(F.tot.rev)}), el("div",{class:"note",text:`${[...S.types].join(", ")} · ${nMonths()} month${nMonths()>1?"s":""}`})),
+    tile("c4", allSel?"Profit & loss (company)":"Loaded profit & loss", money(F.tot.loaded), `${pct(F.tot.loaded/F.tot.rev,1)} margin after ${money(F.tot.alloc)} overhead`),
+    tile("c4", "Direct contribution", money(F.tot.direct), `${pct(F.tot.direct/F.tot.rev,1)} before overhead, as shown in the workbook`)));
+  sec.append(el("div",{class:"row"},
+    tile("c3","Ticket hours (billable)", hrs(F.tot.hrs), `${money(F.tot.rev/F.tot.hrs)} revenue per hour`),
+    tile("c3","Technician utilization", pct(util), `Ticket hours ÷ hours worked, ${techs.length} technicians`),
+    tile("c3","Overhead per billable hour", money(F.tot.over/sum(F.byM,x=>x.billH)), "Unallocated cost spread over ticket hours"),
+    tile("c3","Year-end run rate", money(F.tot.loaded/nMonths()*12), `Annualized P&L on ${money(F.tot.rev/nMonths()*12)} revenue`)));
+  const c1=chartBox(250), c2=chartBox(250);
+  sec.append(el("div",{class:"row"},
+    panel("c8","Monthly revenue and loaded P&L","Columns show revenue by support type; the line is P&L after overhead. Hover a month for detail.",
+      legend([...BILL.filter(t=>S.types.has(t)).map(t=>[t,TYPE_COLOR[t]]),["Loaded P&L","var(--ink-2)",true]]), c1),
+    panel("c4","Margin by support type","Direct margin ignores overhead. Loaded margin carries its share of overhead by hours.", c2)));
+  later(()=>{ colChart(c1,{cats:F.months.map(m=>M[m]),stacked:true,series:BILL.filter(t=>S.types.has(t)).map(t=>({name:t,color:TYPE_COLOR[t],vals:F.byM.map(x=>x[t].rev)})),
+      line:{name:"Loaded P&L",color:"var(--ink-2)",vals:F.byM.map(x=>x.loaded)},extra:i=>[["Margin",pct(F.byM[i].loaded/F.byM[i].rev,1),null]]});
+    const t=el("table"); t.append(el("thead",{},el("tr",{},el("th",{text:"Type"}),el("th",{class:"n",text:"Direct"}),el("th",{class:"n",text:"Loaded"}),el("th",{class:"n",text:"Rev / hr"}))));
+    const tb=el("tbody"); F.types.filter(x=>S.types.has(x.t)).forEach(x=>tb.append(el("tr",{},el("td",{},el("span",{class:"legend",style:"margin:0"},el("span",{},el("i",{style:"background:"+TYPE_COLOR[x.t]}),x.t))),el("td",{class:"n",text:pct(x.dm)}),el("td",{class:"n",text:pct(x.lm)}),el("td",{class:"n",text:money(x.rph)}))));
+    t.append(tb); c2.replaceChildren(el("div",{class:"tbl-wrap"},t), el("p",{class:"small muted",style:"margin:10px 0 0",text:`Loaded P&L allocates ${money(F.tot.over)} of overhead at ${money(F.tot.over/sum(F.byM,x=>x.billH))} per ticket hour.`})); });
+  // findings
+  const best=[...F.byM].sort((a,b)=>b.loaded-a.loaded)[0], worst=[...F.byM].sort((a,b)=>a.loaded-b.loaded)[0];
+  const C=customers().sort((a,b)=>b.rev-a.rev); const top5=sum(C.slice(0,5),c=>c.rev)/sum(C,c=>c.rev); const losers=C.filter(c=>c.rev>0&&c.loaded<0);
+  const lowU=techs.filter(t=>t.util<0.25).map(t=>t.who.split(" ")[0]);
+  const hd=F.types.find(x=>x.t==="Help Desk"), ins=F.types.find(x=>x.t==="Installs"), pr=F.types.find(x=>x.t==="Project");
+  const tsAll=D.synopsis.All?.Total?.["Productive %"];
+  const items=[
+    ["crit",`Margins look much higher on the summary sheets than they are.`,` Help Desk shows ${pct(hd.dm)} direct but ${pct(hd.lm)} loaded; Installs ${pct(ins.dm)} vs ${pct(ins.lm)}. ${money(F.tot.over)} of cost sits in "Unallocated".`],
+    ["warn",`Technicians log ${pct(util)} of worked hours against tickets.`,` During observed time-study days they were ${tsAll?tsAll.toFixed(0)+"%":"about 75%"} productive, so most of the gap is untracked work rather than idle time.${lowU.length?" Lowest: "+lowU.join(", ")+".":""}`],
+    ["warn",`Revenue is concentrated.`,` The top 5 banks bring ${pct(top5)} of revenue in ${period()}; ${losers.length} revenue-earning bank${losers.length===1?"":"s"} lose money once overhead is allocated.`],
+    [best.loaded>0?"good":"warn",`${M[best.m]} was the strongest month`,` (${money(best.loaded)} loaded P&L); ${M[worst.m]} was the weakest (${money(worst.loaded)}).`],
+    ["good",`Project work earns the most per hour.`,` ${money(pr.rph)} per ticket hour, against ${money(hd.rph)} for Help Desk and ${money(ins.rph)} for Installs.`],
+    ["crit",`No budget figures exist in the workbook.`,` The file is titled Budget to Actual but holds actuals only, so budget variance can't be reported yet.`]];
+  const ul=el("ul",{class:"findings"}); items.forEach(([lv,b,rest])=>ul.append(el("li",{},pill(lv,{good:"Strength",warn:"Watch",crit:"Act"}[lv]),el("div",{},el("b",{text:b}),rest))));
+  sec.append(el("div",{class:"row"},panel("c12","Key findings","Generated from the selected months and support types.",ul)));
+};
+
+VIEWS.finance = sec => {
+  const F=finance(); const cats=F.months.map(m=>M[m]);
+  const c1=chartBox(240), c2=chartBox(240), c3=chartBox(), c4=chartBox(240), c5=chartBox();
+  const CK=[["emp","Employee (non-tech)","var(--s1)"],["con","Contractors","var(--s2)"],["tech","Technician support","var(--s3)"],["oth","Other expenses","var(--s4)"],["com","Commissions","var(--s5)"]];
+  sec.append(el("div",{class:"row"},
+    panel("c6","Revenue by support type","Stacked monthly revenue for the selected types.",legend(BILL.filter(t=>S.types.has(t)).map(t=>[t,TYPE_COLOR[t]])),c1),
+    panel("c6","Cost base by component","All company costs per month, whatever support types are selected.",legend(CK.map(c=>[c[1],c[2]])),c2)));
+  sec.append(el("div",{class:"row"},
+    panel("c5","Revenue to P&L bridge",`How ${money(F.tot.rev)} of revenue becomes ${money(F.tot.loaded)} of P&L in ${period()}.`,c3),
+    panel("c7","Direct vs loaded P&L by month","Direct contribution before overhead, and P&L after the overhead share.",legend([["Direct contribution","var(--s1)"],["Loaded P&L","var(--s7)"]]),c4)));
+  const runAll=F.tot.loaded/nMonths()*12, last3=F.byM.slice(-3), run3=sum(last3,x=>x.loaded)/last3.length*12, rev3=sum(last3,x=>x.rev)/last3.length*12;
+  const fc=el("div",{class:"cmp"},
+    tile("","Annualized P&L, average month",money(runAll),`Revenue ${money(F.tot.rev/nMonths()*12)} at ${pct(F.tot.loaded/F.tot.rev,1)} margin`),
+    tile("","Annualized P&L, last 3 months",money(run3),`Revenue ${money(rev3)} · ${last3.map(x=>M[x.m]).join(", ")}`),
+    tile("","Remaining months to Dec",String(Math.max(0,11-S.to)),S.to<11?`At the 3-month pace: ${money(sum(F.byM,x=>x.loaded)+sum(last3,x=>x.loaded)/last3.length*(11-S.to))} P&L by year end`:""));
+  sec.append(el("div",{class:"row"},panel("c12","Year-end forecast","Two simple run-rate views. Add the budget file to compare against plan.",fc)));
+  sec.append(el("div",{class:"row"},panel("c12","Support-type economics","Revenue, direct cost and allocated overhead for each billable line.",c5)));
+  later(()=>{
+    colChart(c1,{cats,stacked:true,series:BILL.filter(t=>S.types.has(t)).map(t=>({name:t,color:TYPE_COLOR[t],vals:F.byM.map(x=>x[t].rev)}))});
+    colChart(c2,{cats,stacked:true,series:CK.map(([k,n,c])=>({name:n,color:c,vals:F.byM.map(x=>x.cost[k])}))});
+    const steps=[["Revenue",F.tot.rev,"var(--s1)"],["Technician support (direct)",-sum(F.types.filter(t=>S.types.has(t.t)),t=>sum(F.byM,x=>x[t.t].tech)*-1),"var(--s3)"],["Project contractors (direct)",-sum(F.byM,x=>S.types.has("Project")?-x.Project.con:0),"var(--s2)"],["Allocated overhead",-F.tot.alloc,"var(--s5)"],["Loaded P&L",F.tot.loaded,"var(--s7)"]];
+    hbars(c3, steps.map(([l,v,c])=>({label:l,v,color:c})));
+    colChart(c4,{cats,series:[{name:"Direct contribution",color:"var(--s1)",vals:F.byM.map(x=>x.direct)},{name:"Loaded P&L",color:"var(--s7)",vals:F.byM.map(x=>x.loaded)}],extra:i=>[["Overhead allocated",money(F.byM[i].alloc),null]]});
+    table(c5,[{k:"t",label:"Support type"},{k:"rev",label:"Revenue",num:1,fmt:v=>money(v,1)},{k:"hrs",label:"Ticket hours",num:1,fmt:num},{k:"rph",label:"Rev / hour",num:1,fmt:v=>money(v)},
+      {k:"direct",label:"Direct P&L",num:1,fmt:v=>money(v,1)},{k:"dm",label:"Direct margin",num:1,fmt:v=>pct(v,1)},{k:"alloc",label:"Overhead share",num:1,fmt:v=>money(v,1)},{k:"loaded",label:"Loaded P&L",num:1,fmt:v=>money(v,1)},{k:"lm",label:"Loaded margin",num:1,render:v=>pill(v>=.25?"good":v>=.1?"warn":"crit",pct(v,1))}],
+      F.types.filter(t=>S.types.has(t.t)),{sort:"rev"}); });
+};
+
+VIEWS.customers = sec => {
+  const C=customers(); const rev=C.filter(c=>c.rev>0).sort((a,b)=>b.rev-a.rev); const tot=sum(rev,c=>c.rev);
+  const c1=chartBox(), c2=chartBox(240), c3=chartBox(), c4=chartBox(), c5=chartBox(), c6=chartBox();
+  const losers=rev.filter(c=>c.loaded<0);
+  sec.append(el("div",{class:"row"},
+    tile("c3","Revenue-earning banks",num(rev.length),`${num(C.length-rev.length)} more with only non-billable time`),
+    tile("c3","Top 5 share",pct(sum(rev.slice(0,5),c=>c.rev)/tot),`Top 10: ${pct(sum(rev.slice(0,10),c=>c.rev)/tot)}`),
+    tile("c3","Unprofitable after overhead",num(losers.length),`${money(sum(losers,c=>c.loaded))} combined loaded P&L`),
+    tile("c3","Non-billable hours on banks",hrs(sum(C,c=>c.nb)),"Ticket time logged with no revenue")));
+  sec.append(el("div",{class:"row"},
+    panel("c6","Top 15 banks by revenue","Hover a bar for P&L and hours.",c1),
+    panel("c6","Revenue concentration","Cumulative share of revenue as banks are added in order of size.",c2)));
+  sec.append(el("div",{class:"row"},
+    panel("c6","Lowest loaded P&L","Banks where hours cost more than they earn once overhead is included.",c3),
+    panel("c6","Revenue per ticket hour","Banks with at least 20 billable hours. Low values point to under-priced work.",c4)));
+  sec.append(el("div",{class:"row"},panel("c12","All banks","Sortable. Loaded P&L subtracts overhead at the per-hour rate.",c5)));
+  // rates review
+  const R=D.rates; const byKey=new Map(); R.forEach(([o,t,r])=>{ const base=o.replace(/\s+(January|February|March|April|May|June|July|August|September|October|November|December)$/i,""); const k=base+"|"+t; (byKey.get(k)||byKey.set(k,[]).get(k)).push({o,r}); });
+  const rr=[...byKey].map(([k,v])=>{ const [org,t]=k.split("|"); const rates=[...new Set(v.map(x=>x.r))].sort((a,b)=>a-b); const cust=D.cust[org]||[]; const x=cust.filter(r=>r[1]===t&&inRange(r[0]));
+    const rv=sum(x,r=>r[2]), h=sum(x,r=>r[4]), n=sum(x,r=>r[6]); return {org,t,rates:rates.map(r=>"$"+nf0.format(r)).join(" / "),n:rates.length,months:v.filter(z=>z.o!==org).length,rpt:n?rv/n:null,rph:h?rv/h:null,lab:n}; });
+  sec.append(el("div",{class:"row"},
+    panel("c7","Rate review","Listed rates per bank and support type, against what was actually billed per ticket and per hour.",c6),
+    panel("c5","Projects","Project list from the customer summary sheet.",(()=>{ const host=chartBox(); later(()=>table(host,[{k:"p",label:"Project"},{k:"d",label:"Completion",fmt:v=>v||"–"},{k:"done",label:"Status",render:v=>v==="Yes"?pill("good","Complete"):v==="No"?pill("warn","Open"):pill("ser","Not set")}],D.projects,{sort:"p",dir:1})); return host; })())));
+  later(()=>{
+    hbars(c1, rev.slice(0,15).map(c=>({label:c.org,v:c.rev,color:"var(--s1)",tip:[["Revenue",money(c.rev,1),"var(--s1)"],["Direct P&L",money(c.pl,1)],["Loaded P&L",money(c.loaded,1)],["Billable hours",hrs(c.h)]]})));
+    let cum=0; const cv=rev.map(c=>(cum+=c.rev)/tot); const idx=[...Array(rev.length)].map((_,i)=>i+1);
+    lineChart(c2,{cats:idx.map(String),series:[{name:"Cumulative share",color:"var(--s1)",vals:cv,area:true}]});
+    hbars(c3, [...C].filter(c=>c.h>0).sort((a,b)=>a.loaded-b.loaded).slice(0,12).map(c=>({label:c.org,v:c.loaded,color:c.loaded<0?"var(--s8)":"var(--s3)",tip:[["Loaded P&L",money(c.loaded,1),"var(--s8)"],["Revenue",money(c.rev,1)],["Billable hours",hrs(c.h)]]})));
+    hbars(c4, rev.filter(c=>c.h>=20).sort((a,b)=>a.rph-b.rph).slice(0,12).map(c=>({label:c.org,v:c.rph,color:"var(--s4)",tip:[["Revenue / hour",money(c.rph),"var(--s4)"],["Revenue",money(c.rev,1)],["Hours",hrs(c.h)]]})));
+    table(c5,[{k:"org",label:"Bank"},{k:"rev",label:"Revenue",num:1,fmt:v=>money(v,1)},{k:"pl",label:"Direct P&L",num:1,fmt:v=>money(v,1)},{k:"loaded",label:"Loaded P&L",num:1,fmt:v=>money(v,1)},
+      {k:"margin",label:"Loaded margin",num:1,render:v=>v==null?"–":pill(v>=.25?"good":v>=0?"warn":"crit",pct(v))},{k:"h",label:"Billable hrs",num:1,fmt:v=>nf1.format(v)},{k:"nb",label:"Non-billable hrs",num:1,fmt:v=>nf1.format(v)},{k:"rph",label:"Rev / hr",num:1,fmt:v=>v==null?"–":money(v)},{k:"n",label:"Tickets",num:1,fmt:num}],
+      C,{sort:"rev",page:25,search:"Search banks",id:"cust"});
+    table(c6,[{k:"org",label:"Bank"},{k:"t",label:"Type"},{k:"rates",label:"Listed rate(s)",render:(v,x)=>x.n>1?el("span",{},v+" ",pill("warn",x.n+" rates")):v},{k:"rpt",label:"Billed / ticket",num:1,fmt:v=>v==null?"–":money(v)},{k:"rph",label:"Billed / hour",num:1,fmt:v=>v==null?"–":money(v)},{k:"lab",label:"Tickets",num:1,fmt:num}],
+      rr,{sort:"n",page:15,search:"Search rates",id:"rates",maxH:520}); });
+};
+
+VIEWS.team = sec => {
+  const T=techStats(); const techs=TECHS.map(p=>T[p]).filter(Boolean).sort((a,b)=>b.util-a.util);
+  const everyone=Object.values(T).filter(t=>t.worked>0).sort((a,b)=>b.worked-a.worked);
+  const c1=chartBox(), c2=chartBox(), c3=chartBox(), c4=chartBox(), c5=chartBox(), c6=chartBox(), c7=chartBox(), c8=chartBox(240);
+  const tw=sum(techs,t=>t.worked), tc=sum(techs,t=>t.call), tb=sum(techs,t=>t.bill);
+  sec.append(el("div",{class:"row"},
+    tile("c3","Technician hours worked",hrs(tw),"Regular plus overtime, 8 technicians"),
+    tile("c3","Logged on tickets",hrs(tc),`${pct(tc/tw)} of hours worked`),
+    tile("c3","Logged on billable tickets",hrs(tb),`${pct(tb/tw)} of hours worked`),
+    tile("c3","Revenue per hour worked",money(sum(techs,t=>t.rev)/tw),"Ticket revenue ÷ technician hours worked")));
+  // target capacity
+  const tgt=el("input",{type:"range",min:20,max:80,step:5,value:S.target??50,id:"tgt"}); const tOut=el("output",{text:(S.target??50)+"%"});
+  sec.append(el("div",{class:"row"},
+    panel("c6","Utilization by technician","Ticket hours ÷ hours worked. Darker segment is billable work.",legend([["Billable ticket hours","var(--s1)"],["Non-billable ticket hours","var(--h1)"]]),c1),
+    panel("c6","Capacity at a target utilization","Hours each technician would need to log to reach the target, and the revenue that time would earn at their own rate.",
+      el("div",{class:"slider"},el("label",{for:"tgt",text:"Target ticket utilization"}),tOut,tgt),c2)));
+  sec.append(el("div",{class:"row"},panel("c12","Utilization by month","Ticket hours ÷ hours worked for each technician. Darker cells are busier months.",c3)));
+  sec.append(el("div",{class:"row"},
+    panel("c6","Support-type mix","Share of each technician's ticket hours.",legend([...BILL.map(t=>[t,TYPE_COLOR[t]]),["Non-billable","var(--s4)"],["Hardware / admin","var(--sN)"]]),c4),
+    panel("c6","Where the observed day goes vs. the ticket log","Time-study productive share on the observed days, against ticket hours ÷ hours worked for the year.",legend([["Productive in time study","var(--s3)"],["Ticket-logged share of hours","var(--s1)"]]),c8)));
+  const PT=[["REGULAR","Regular","var(--s1)"],["OVERTIME","Overtime","var(--s2)"],["VACATION","Vacation","var(--s3)"],["SICK","Sick","var(--s4)"],["HOLIDAY","Holiday","var(--s5)"],["FLOAT","Float holiday","var(--s6)"],["BEREAV","Bereavement","var(--s7)"]];
+  sec.append(el("div",{class:"row"},
+    panel("c7","Paid hours by pay type","Everyone on the timesheet, selected months.",legend(PT.map(p=>[p[1],p[2]])),c5),
+    panel("c5","Time off by weekday",`Vacation, sick, float and bereavement hours, ${span(M)}. Clusters on Mondays or Fridays are worth a look.`,c6)));
+  sec.append(el("div",{class:"row"},panel("c12","Company allocation",`Weekly hours split between BTG and AVT from the Resource hours sheet (${META.resLast==null?"no weeks filled in":META.resLast>=M.length-1?span(M):span(M.slice(0,META.resLast+1))+" only; later months are not filled in"}), plus Digital Check hours from the timesheet.`,c7)));
+  later(()=>{
+    stackRows(c1, techs.map(t=>({label:t.who,right:pct(t.util),parts:[{name:"Billable",v:t.bill,color:"var(--s1)"},{name:"Non-billable",v:t.call-t.bill,color:"var(--h1)"},{name:"Not on tickets",v:Math.max(0,t.worked-t.call),color:"var(--grid)"}]})));
+    const drawCap=()=>{ const g=(S.target??50)/100; const items=techs.map(t=>{ const need=Math.max(0,g*t.worked-t.call); const rph=t.bill? t.rev/t.bill : 0; return {label:t.who,v:need,color:"var(--s7)",vtext:hrs(need),tip:[["Extra hours needed",hrs(need),"var(--s7)"],["Revenue at own rate",money(need*rph),null],["Current utilization",pct(t.util),null]]}; });
+      const gap=sum(items,i=>i.v), rev=sum(techs.map((t,i)=>items[i].v*(t.bill?t.rev/t.bill:0)));
+      hbars(c2, items, {fmt:hrs}); c2.append(el("p",{class:"small muted",style:"margin:10px 0 0",text:`${hrs(gap)} more ticket time across the team, worth about ${money(rev)} at current revenue per billable hour (${period()}).`})); };
+    drawCap(); tgt.addEventListener("input",()=>{S.target=+tgt.value; tOut.textContent=tgt.value+"%"; drawCap();});
+    const ms=[...Array(nMonths())].map((_,i)=>S.from+i);
+    heat(c3, techs.map(t=>t.who), ms.map(m=>M[m]), techs.map(t=>ms.map(m=>{const x=t.byM[m]; return x&&x.w? x.c/x.w : null;})), v=>pct(v), {name:"Utilization"});
+    stackRows(c4, techs.map(t=>({label:t.who,right:hrs(t.call),parts:[...BILL.map(ty=>({name:ty,v:t.byT[ty]||0,color:TYPE_COLOR[ty]})),{name:"Non-billable",v:t.byT["Non-Billable"]||0,color:"var(--s4)"},{name:"Hardware / admin",v:(t.byT["Hardware"]||0)+(t.byT["Admin"]||0),color:"var(--sN)"}]})));
+    const syn=D.synopsis; const ppl=Object.keys(syn).filter(k=>k!=="All"&&T[k]);
+    colChart(c8,{cats:ppl.map(p=>p.split(" ")[0]),series:[{name:"Productive in time study",color:"var(--s3)",vals:ppl.map(p=>syn[p].Total["Productive %"]/100)},{name:"Ticket-logged share",color:"var(--s1)",vals:ppl.map(p=>T[p].util)}],fmt:v=>pct(v),catTitle:c=>ppl.find(p=>p.startsWith(c))});
+    const per=everyone.map(t=>{ const parts=PT.map(([k,n,c])=>({name:n,v:sum(D.ts.filter(r=>r[0]===t.who&&r[2]===k&&inRange(r[1])),r=>r[3]),color:c})); return {label:t.who,parts}; });
+    stackRows(c5, per);
+    const days=["Monday","Tuesday","Wednesday","Thursday","Friday"]; const ppl2=[...new Set(D.absence.map(a=>a[0]))].sort();
+    heat(c6, ppl2, days.map(d=>d.slice(0,3)), ppl2.map(p=>days.map(d=>sum(D.absence.filter(a=>a[0]===p&&a[1]===d),a=>a[3])||null)), v=>nf0.format(v), {name:"Hours off"});
+    const RH=D.resHours; const ppl3=[...new Set(RH.map(r=>r[0]))]; const rows=ppl3.map(p=>{ const x=RH.filter(r=>r[0]===p&&inRange(r[1])); const dc=sum(D.ts.filter(r=>r[0]===p&&inRange(r[1])),r=>r[7]); return {label:p,parts:[{name:"BTG",v:sum(x,r=>r[3]),color:"var(--s1)"},{name:"AVT",v:sum(x,r=>r[2]),color:"var(--s2)"},{name:"Digital Check (timesheet)",v:dc,color:"var(--s3)"}]}; }).filter(r=>sum(r.parts,p=>p.v)>0);
+    c7.replaceChildren(legend([["BTG","var(--s1)"],["AVT","var(--s2)"],["Digital Check","var(--s3)"]])); const h=chartBox(); c7.append(h); stackRows(h, rows); });
+};
+
+VIEWS.tickets = sec => {
+  if(!TK.length){ sec.append(el("div",{class:"row"},panel("c12","No ticket exports","Add monthly sheets named like \"October Help Desk\", \"October Installs\" and \"October Projects\" to the workbook. The newest month found is used.",el("div")))); return; }
+  const ins=TK.filter(t=>t.type==="Installs"), hd=TK.filter(t=>t.type==="Help Desk");
+  const c=[...Array(9)].map(()=>chartBox());
+  sec.append(el("div",{class:"row"},
+    tile("c3",`${TKM} tickets`,num(TK.length),`${num(hd.length)} Help Desk · ${num(ins.length)} Installs · ${num(D.sepProjects.length)} project sessions`),
+    tile("c3","Average handle time",`${nf0.format(sum(hd,t=>t.h)/hd.length*60)} / ${nf0.format(sum(ins,t=>t.h)/ins.length*60)} min`,"Help Desk / Installs"),
+    tile("c3","Median days open",`${median(hd.map(t=>t.days))} / ${median(ins.map(t=>t.days))}`,`Means ${nf1.format(sum(hd,t=>t.days)/hd.length)} / ${nf1.format(sum(ins,t=>t.days)/ins.length)} days`),
+    tile("c3","Open longer than 14 days",num(TK.filter(t=>t.days>14).length),`${pct(TK.filter(t=>t.days>14).length/TK.length)} of tickets`)));
+  const bars=(host,list,color,name)=>hbars(host,list.map(([l,v])=>({label:short(l),v,color,vtext:num(v),tip:[[name||"Tickets",num(v),color]]})),{fmt:num});
+  sec.append(el("div",{class:"row"},panel("c6","Top problems","Problem description on Help Desk and Install tickets.",c[0]),panel("c6","Top resolutions","How the tickets were closed.",c[1])));
+  sec.append(el("div",{class:"row"},panel("c4","Scanner model",null,c[2]),panel("c4","Operating system",null,c[3]),panel("c4","Deposit software",null,c[4])));
+  sec.append(el("div",{class:"row"},panel("c6","Tickets by bank",`Top 12 banks by ${TKM} ticket count.`,c[5]),panel("c6","Days to resolve",`Created to solved, all ${TKM} tickets.`,c[6])));
+  sec.append(el("div",{class:"row"},panel("c7","By technician","Tickets solved, average handle time and median days open.",c[7]),panel("c5","Project sessions by weekday and hour",`Scheduled project work in ${TKM}.`,c[8])));
+  later(()=>{
+    bars(c[0],countBy(TK,t=>t.prob).slice(0,10),"var(--s1)"); bars(c[1],countBy(TK,t=>t.res).slice(0,10),"var(--s3)");
+    bars(c[2],countBy(TK,t=>t.scan).slice(0,7),"var(--s7)"); bars(c[3],countBy(TK,t=>t.os).slice(0,7),"var(--s7)"); bars(c[4],countBy(TK,t=>t.sw).slice(0,6),"var(--s7)");
+    bars(c[5],countBy(TK,t=>t.org).slice(0,12),"var(--s1)");
+    const bins=[["Same day",0,0],["1 day",1,1],["2–3",2,3],["4–7",4,7],["8–14",8,14],["15–30",15,30],["31+",31,1e9]];
+    colChart(c[6],{cats:bins.map(b=>b[0]),series:[{name:"Help Desk",color:"var(--s1)",vals:bins.map(b=>hd.filter(t=>t.days>=b[1]&&t.days<=b[2]).length)},{name:"Installs",color:"var(--s2)",vals:bins.map(b=>ins.filter(t=>t.days>=b[1]&&t.days<=b[2]).length)}],stacked:true,fmt:num,h:220});
+    c[6].prepend(legend([["Help Desk","var(--s1)"],["Installs","var(--s2)"]]));
+    const who=[...new Set(TK.map(t=>t.who))]; const rows=who.map(w=>{ const x=TK.filter(t=>t.who===w); const p=D.sepProjects.filter(r=>r[1]===w); return {who:w,n:x.length,hd:x.filter(t=>t.type==="Help Desk").length,ins:x.filter(t=>t.type==="Installs").length,aht:sum(x,t=>t.h)/x.length*60,med:median(x.map(t=>t.days)),proj:p.length,ph:sum(p,r=>r[2])}; });
+    table(c[7],[{k:"who",label:"Technician"},{k:"n",label:"Tickets",num:1},{k:"hd",label:"Help Desk",num:1},{k:"ins",label:"Installs",num:1},{k:"aht",label:"Avg min",num:1,fmt:v=>nf0.format(v)},{k:"med",label:"Median days",num:1},{k:"proj",label:"Project sessions",num:1},{k:"ph",label:"Project hrs",num:1,fmt:v=>nf1.format(v)}],rows,{sort:"n"});
+    const dn=["Mon","Tue","Wed","Thu","Fri"], hrsL=[8,9,10,11,12,13,14,15,16,17];
+    heat(c[8], dn, hrsL.map(h=>(h>12?h-12:h)+(h>=12?"p":"a")), dn.map((_,d)=>hrsL.map(h=>D.sepProjects.filter(r=>r[5]===d&&r[4]===h).length||null)), num, {name:"Sessions"}); });
+};
+
+VIEWS.timestudy = sec => {
+  if(!D.studies.length){ sec.append(el("div",{class:"row"},panel("c12","No time studies","Put the time-study workbooks (each with a \"Time Study\" sheet) in the drop folder.",el("div")))); return; }
+  const syn=D.synopsis; const ppl=Object.keys(syn).filter(k=>k!=="All");
+  const ST=D.studies; const acts=D.actions;
+  const cost=el("input",{type:"number",min:10,max:200,step:1,value:S.cost??35,id:"hrcost",style:"width:80px"});
+  const c1=chartBox(240), c2=chartBox(), c3=chartBox(), c4=chartBox(), c5=chartBox(), c6=chartBox();
+  const all=syn.All.Total;
+  sec.append(el("div",{class:"row"},
+    tile("c3","Team productive share",all["Productive %"].toFixed(1)+"%",`${num(all["Activity lines"])} timed activities over ${ST.length} observed days`),
+    tile("c3","Non-productive time observed",hrs(all["Non-Productive min"]/60),"Breaks, lunch overruns and idle time"),
+    tile("c3","Coaching items",num(acts.filter(a=>a[2]==="Coaching").length),`${num(acts.filter(a=>a[2]==="Corrective action").length)} flagged for corrective action`),
+    el("div",{class:"panel tile c3"},el("div",{class:"label",text:"Cost of non-productive time"}),el("div",{class:"val",id:"idleCost"}),el("div",{class:"note flex"},el("label",{for:"hrcost",text:"Loaded cost per hour $"}),cost))));
+  sec.append(el("div",{class:"row"},
+    panel("c6","Productive share, round 1 vs round 2","From the Overall Synopsis workbook. Round 3 applies to one technician only.",legend([["Round 1","var(--s1)"],["Round 2","var(--s2)"]]),c1),
+    panel("c6","Coaching and corrective actions","Items flagged by the reviewers, by technician.",legend([["Coaching","var(--s1)"],["Corrective action","var(--s8)"]]),c2)));
+  sec.append(el("div",{class:"row"},panel("c12","Observed days, minute by minute","Each bar is one observed day from 7:30 to 18:30. Hover a segment for the activity.",legend([["Productive","var(--s3)"],["Break / non-productive","var(--s2)"],["Untyped entry","var(--sN)"]]),c3)));
+  sec.append(el("div",{class:"row"},
+    panel("c6","Average minutes per activity","Mean duration of each logged task, by technician (all rounds).",c4),
+    panel("c6","Where flagged time went","Flagged items by task, coloured by category.",legend([["Coaching","var(--s1)"],["Corrective action","var(--s8)"]]),c5)));
+  sec.append(el("div",{class:"row"},panel("c12","Study coverage","One row per workbook in the Time Study folder.",c6)));
+  later(()=>{
+    const upd=()=>{ S.cost=+cost.value||35; document.getElementById("idleCost").textContent=money(all["Non-Productive min"]/60*S.cost)+" over the observed days"; }; upd(); cost.addEventListener("input",upd);
+    colChart(c1,{cats:ppl.map(p=>p.split(" ")[0]),series:[{name:"Round 1",color:"var(--s1)",vals:ppl.map(p=>(syn[p].R1?.["Productive %"]??0)/100)},{name:"Round 2",color:"var(--s2)",vals:ppl.map(p=>(syn[p].R2?.["Productive %"]??0)/100)}],fmt:v=>pct(v),catTitle:c=>ppl.find(p=>p.startsWith(c)),extra:i=>[["Overall",syn[ppl[i]].Total["Productive %"].toFixed(1)+"%",null]]});
+    const ap=[...new Set(acts.map(a=>a[0]))]; colChart(c2,{cats:ap.map(p=>p.split(" ").at(-1)),stacked:true,fmt:num,series:[{name:"Coaching",color:"var(--s1)",vals:ap.map(p=>acts.filter(a=>a[0]===p&&a[2]==="Coaching").length)},{name:"Corrective action",color:"var(--s8)",vals:ap.map(p=>acts.filter(a=>a[0]===p&&a[2]==="Corrective action").length)}],catTitle:c=>ap.find(p=>p.endsWith(c))});
+    const t0=7.5,t1=18.5; const box=el("div"); const ax=el("div",{class:"gantt-axis"}); for(let h=8;h<=18;h+=2) ax.append(el("span",{style:`left:${(h-t0)/(t1-t0)*100}%`,text:(h>12?h-12:h)+(h>=12?"pm":"am")})); box.append(ax);
+    [...ST].sort((a,b)=>a.who.localeCompare(b.who)||a.round-b.round||a.date.localeCompare(b.date)).forEach(s=>{ const tr=el("div",{class:"gantt-track"});
+      s.lines.forEach(l=>{ if(l[4]==null||!l[3]) return; const left=(l[4]-t0)/(t1-t0)*100, w=l[3]/60/(t1-t0)*100; if(left>100||left+w<0) return;
+        const sp=el("span",{style:`left:${Math.max(0,left)}%;width:${Math.max(.25,w)}%;background:var(${l[2]==="P"?"--s3":l[2]==="N"?"--s2":"--sN"})`}); tr.append(sp);
+        const hh=Math.floor(l[4]), mm=Math.round((l[4]-hh)*60); hover(sp, `${s.who} · R${s.round} · ${s.date}`, [[l[0]+(l[1]?" ("+l[1]+")":""), nf1.format(l[3])+" min", null],["Start",`${hh}:${String(mm).padStart(2,"0")}`,null]]); });
+      box.append(el("div",{class:"gantt-row"},el("div",{},el("div",{text:s.who}),el("div",{class:"muted small",text:`Round ${s.round} · ${s.date}${s.half?" · half day":""}`})),tr)); });
+    c3.replaceChildren(el("div",{style:"overflow-x:auto"},el("div",{style:"min-width:560px"},box)));
+    const tasks=["Call","Chat","E-Mail","Ticket Time","Ticket Hold","Queue Review","Status Change","Break","Lunch"]; const sp=[...new Set(ST.map(s=>s.who))].sort();
+    heat(c4, sp, tasks, sp.map(p=>tasks.map(t=>{ const L=ST.filter(s=>s.who===p).flatMap(s=>s.lines).filter(l=>l[0]===t); return L.length? sum(L,l=>l[3])/L.length : null; })), v=>nf1.format(v), {name:"Avg minutes",corner:"min / task"});
+    const tk=[...new Set(acts.map(a=>a[4]))]; const cnt=tk.map(t=>({t,c:acts.filter(a=>a[4]===t&&a[2]==="Coaching").length,x:acts.filter(a=>a[4]===t&&a[2]==="Corrective action").length})).sort((a,b)=>(b.c+b.x)-(a.c+a.x));
+    stackRows(c5, cnt.map(r=>({label:r.t,right:num(r.c+r.x),parts:[{name:"Coaching",v:r.c,color:"var(--s1)"},{name:"Corrective action",v:r.x,color:"var(--s8)"}]})),{fmt:num});
+    table(c6,[{k:"file",label:"Workbook"},{k:"who",label:"Technician"},{k:"round",label:"Round",num:1},{k:"date",label:"Date"},{k:"n",label:"Lines",num:1},{k:"p",label:"Productive min",num:1,fmt:v=>nf0.format(v)},{k:"np",label:"Non-prod. min",num:1,fmt:v=>nf0.format(v)},{k:"u",label:"Untyped min",num:1,fmt:v=>nf0.format(v)},{k:"syn",label:"In synopsis",render:v=>v?pill("good","Yes"):pill("warn","No")}],
+      ST.map(s=>({file:s.file,who:s.who,round:s.round,date:s.date,n:s.lines.length,p:sum(s.lines.filter(l=>l[2]==="P"),l=>l[3]),np:sum(s.lines.filter(l=>l[2]==="N"),l=>l[3]),u:sum(s.lines.filter(l=>l[2]==="U"),l=>l[3]),syn:!!syn[s.who]})),{sort:"who",dir:1}); });
+};
+
+VIEWS.scorecard = sec => {
+  const T=techStats(); const syn=D.synopsis; const acts=D.actions;
+  const rows=TECHS.map(p=>{ const t=T[p]||{}; const x=TK.filter(k=>k.who===p); return {who:p,worked:t.worked||0,call:t.call||0,util:t.util,butil:t.butil,rev:t.rev||0,rpw:t.rpw,
+    sep:x.length,aht:x.length?sum(x,k=>k.h)/x.length*60:null,med:median(x.map(k=>k.days)),prod:syn[p]?syn[p].Total["Productive %"]/100:null,
+    coach:acts.filter(a=>a[0]===p&&a[2]==="Coaching").length,corr:acts.filter(a=>a[0]===p&&a[2]==="Corrective action").length}; });
+  const u=r=>r==null?"–":pill(r>=.4?"good":r>=.25?"warn":"crit",pct(r));
+  const host=chartBox(); const c2=chartBox(260);
+  sec.append(el("div",{class:"row"},panel("c12","Technician scorecard",`Hours, revenue and utilization for ${period()}; ${TKM} tickets; time-study results. Utilization: 40% or more is on target, 25–40% watch, under 25% low.`,host)));
+  sec.append(el("div",{class:"row"},panel("c12","Revenue per hour worked","Ticket revenue earned for every hour each technician worked.",c2)));
+  later(()=>{ table(host,[{k:"who",label:"Technician"},{k:"worked",label:"Hours worked",num:1,fmt:num},{k:"call",label:"Ticket hrs",num:1,fmt:num},{k:"util",label:"Utilization",num:1,render:u},{k:"butil",label:"Billable util.",num:1,fmt:v=>pct(v)},
+    {k:"rev",label:"Revenue",num:1,fmt:v=>money(v)},{k:"rpw",label:"Rev / hr worked",num:1,fmt:v=>v==null?"–":money(v)},{k:"sep",label:`${TKS} tickets`,num:1},{k:"aht",label:"Avg min",num:1,fmt:v=>v==null?"–":nf0.format(v)},{k:"med",label:"Median days",num:1,fmt:v=>v??"–"},
+    {k:"prod",label:"Time-study prod.",num:1,fmt:v=>v==null?"–":pct(v)},{k:"coach",label:"Coaching",num:1},{k:"corr",label:"Corrective",num:1,render:v=>v?pill("crit",String(v)):"0"}],rows,{sort:"util"});
+    hbars(c2,[...rows].sort((a,b)=>b.rpw-a.rpw).map(r=>({label:r.who,v:r.rpw||0,color:"var(--s1)",tip:[["Revenue / hour worked",money(r.rpw||0),"var(--s1)"],["Revenue",money(r.rev)],["Hours worked",hrs(r.worked)]]}))); });
+};
+
+VIEWS.scenarios = sec => {
+  const F=finance(); const T=techStats(); const techs=TECHS.map(p=>T[p]).filter(Boolean); const k=12/nMonths();
+  S.sc ??= {util:0, hd:0, ins:0, prj:0, con:0, ovh:0};
+  const defs=[["util","Technician utilization uplift",0,20,1,"pp","Extra billable ticket hours as a share of technician hours worked, earned at the current revenue per billable hour less direct technician cost."],
+    ["hd","Help Desk price change",-20,30,1,"%","Applied to Help Desk revenue at the same volume."],["ins","Installs price change",-20,30,1,"%","Applied to Installs revenue at the same volume."],["prj","Project price change",-20,30,1,"%","Applied to Project revenue at the same volume."],
+    ["con","Contractor spend reduction",0,100,5,"%","Cuts both project contractors and unallocated contractor support."],["ovh","Overhead reduction",0,30,1,"%","Cuts unallocated employee, other expense and commission costs."]];
+  const box=el("div"); const out=el("div"); const c=chartBox(220);
+  defs.forEach(([key,label,mn,mx,st,u,hint])=>{ const inp=el("input",{type:"range",min:mn,max:mx,step:st,value:S.sc[key],id:"sc-"+key}); const o=el("output",{text:(S.sc[key]>0&&u==="%"&&key!=="con"&&key!=="ovh"?"+":"")+S.sc[key]+u});
+    inp.addEventListener("input",()=>{ S.sc[key]=+inp.value; o.textContent=(S.sc[key]>0&&u==="%"&&key!=="con"&&key!=="ovh"?"+":"")+inp.value+u; calc(); });
+    box.append(el("div",{class:"slider"},el("label",{for:"sc-"+key,text:label}),o,inp,el("div",{class:"hint",text:hint}))); });
+  const reset=el("button",{class:"btn",text:"Reset to baseline"}); reset.addEventListener("click",()=>{ S.sc={util:0,hd:0,ins:0,prj:0,con:0,ovh:0}; render(); }); box.append(reset);
+  sec.append(el("div",{class:"row"},panel("c5","Levers",`Baseline is ${period()} annualized (×${nf1.format(k)}). All support types are included here.`,box),panel("c7","Annualized result","Baseline against the scenario.",out,c)));
+  function calc(){
+    const all=D.finMonthly.filter(r=>inRange(r.m)); const rev=sum(all,r=>r.rev), pl=sum(all,r=>r.pl);
+    const by=t=>all.filter(r=>r.t===t); const bh=sum(all.filter(r=>BILL.includes(r.t)),r=>r.hrs); const rph=rev/bh; const dcph=-sum(all.filter(r=>BILL.includes(r.t)),r=>r.tech)/bh;
+    const worked=sum(techs,t=>t.worked); const xh=worked*S.sc.util/100;
+    const dUtil=xh*(rph-dcph); const rUtil=xh*rph;
+    const dHd=sum(by("Help Desk"),r=>r.rev)*S.sc.hd/100, dIn=sum(by("Installs"),r=>r.rev)*S.sc.ins/100, dPr=sum(by("Project"),r=>r.rev)*S.sc.prj/100;
+    const dCon=-sum(all,r=>r.con)*S.sc.con/100; const un=by("Unallocated"); const dOv=-(sum(un,r=>r.emp)+sum(un,r=>r.oth)+sum(un,r=>r.com))*S.sc.ovh/100;
+    const nRev=rev+rUtil+dHd+dIn+dPr, nPl=pl+dUtil+dHd+dIn+dPr+dCon+dOv;
+    const fmtD=(a,b)=>{ const d=b-a; return el("span",{class:d>0?"delta-up":d<0?"delta-down":"",text:(d>=0?"+":"−")+money(Math.abs(d))}); };
+    out.replaceChildren(el("div",{class:"cmp"},
+      el("div",{class:"tile"},el("div",{class:"label",text:"Revenue"}),el("div",{class:"val",text:money(nRev*k)}),el("div",{class:"note"},"Baseline "+money(rev*k)+" · ",fmtD(rev*k,nRev*k))),
+      el("div",{class:"tile"},el("div",{class:"label",text:"Profit & loss"}),el("div",{class:"val",text:money(nPl*k)}),el("div",{class:"note"},"Baseline "+money(pl*k)+" · ",fmtD(pl*k,nPl*k))),
+      el("div",{class:"tile"},el("div",{class:"label",text:"Margin"}),el("div",{class:"val",text:pct(nPl/nRev,1)}),el("div",{class:"note",text:"Baseline "+pct(pl/rev,1)}))));
+    const parts=[["Utilization",dUtil],["Help Desk price",dHd],["Installs price",dIn],["Project price",dPr],["Contractors",dCon],["Overhead",dOv]];
+    hbars(c, parts.map(([l,v])=>({label:l,v:v*k,color:v>=0?"var(--s3)":"var(--s8)"})), {name:"Annual P&L impact"});
+    c.prepend(el("p",{class:"small muted",style:"margin:16px 0 8px",text:"Annual P&L impact of each lever"})); }
+  later(calc);
+};
+
+VIEWS.quality = sec => {
+  const d=D; const fm=d.finMonthly; const un=-sum(fm.filter(r=>r.t==="Unallocated"),r=>r.pl);
+  const multi=(()=>{ const m=new Map(); d.rates.forEach(([o,t,r])=>{ const b=o.replace(/\s+(January|February|March|April|May|June|July|August|September|October|November|December)$/i,""); const k=b+"|"+t; (m.get(k)||m.set(k,new Set()).get(k)).add(r); }); return [...m.values()].filter(s=>s.size>1).length; })();
+  const monthNamed=d.rates.filter(r=>/(January|February|March|April|May|June|July|August|September|October|November|December)$/i.test(r[0])).length;
+  const byNum=new Map(); Object.keys(d.cust).forEach(o=>{ const m=o.match(/(\d{3,})\s*$/); if(m) (byNum.get(m[1])||byNum.set(m[1],[]).get(m[1])).push(o); }); const dupOrgs=[...byNum.values()].filter(v=>v.length>1);
+  const unk=d.tech.filter(r=>["Unknown","Unassigned","Contractor","Forfeited"].includes(r[0])); const unkH=sum(unk,r=>r[5]);
+  const noDate=d.projects.filter(p=>!p.d).length; const blanks=k=>TK.filter(t=>!t[k]).length;
+  const untyped=sum(d.studies.flatMap(s=>s.lines).filter(l=>l[2]==="U"),l=>l[3]);
+  const tinyStudies=d.studies.filter(s=>s.lines.length<5).map(s=>`${s.who} round ${s.round}`);
+  const dupStudies=Object.entries(countBy(d.studies,s=>s.who+" round "+s.round).reduce((o,[k,v])=>(v>1&&(o[k]=v),o),{})).map(([k])=>k);
+  const missingPooled=M.filter((_,i)=>!(d.pooledHours||{})[i]);
+  const dms=BILL.map(t=>{ const x=fm.filter(r=>r.t===t); const rv=sum(x,r=>r.rev); return rv?sum(x,r=>r.pl)/rv:null; }).filter(v=>v!=null);
+  const dmRange=dms.length?`${pct(Math.min(...dms))}–${pct(Math.max(...dms))}`:"n/a";
+  const items=[
+    ["crit","No budget figures","The workbook is titled Budget to Actual, but no sheet holds budget or plan numbers. Budget variance can't be reported until a budget is added."],
+    ["crit","Overhead not assigned to support types",`${money(un,1)} sits in "Unallocated" (salaries, contractors, technician support, other costs, commissions). Summary sheets that leave it out show direct margins of ${dmRange} for the billable support types.`],
+    ...(META.aliases&&META.aliases.length?[["warn","Name variants for the same person",`${META.aliases.length} name spellings were merged into a standard name: ${META.aliases.join("; ")}. Lookups in the workbook do not merge them.`]]:[]),
+    ["warn","Ticket time with no named technician",`${hrs(unkH)} of ticket time is logged to Unknown, Contractor, Forfeited or a blank assignee.`],
+    ...(multi||monthNamed?[["warn","Conflicting billing rates",`${multi} bank and support-type pairs have more than one listed rate, and ${monthNamed} rate rows have a month name appended to the bank name, which breaks a lookup on bank name.`]]:[]),
+    ...(dupOrgs.length?[["warn","Same bank under different names",`${dupOrgs.length} account numbers appear under more than one bank name (for example ${dupOrgs.slice(0,2).map(v=>v.join(" / ")).join("; ")}).`]]:[]),
+    ...(META.hwTrailing?[["warn","Trailing space in \"Hardware \"",`The Hardware support type carries a trailing space in ${num(META.hwTrailing)} detail rows, so filters and lookups on "Hardware" miss them.`]]:[]),
+    ...(META.resLast==null||META.resLast<M.length-1||META.resRelabeled?[["warn","Resource hours sheet is incomplete",[META.resRelabeled?`${META.resRelabeled} week labels are repeats of an earlier month and were read as the following month.`:"",META.resLast==null?"No weeks are filled in.":META.resLast<M.length-1?`Nothing is filled in after ${M_ALL[META.resLast]}.`:""].filter(Boolean).join(" ")]]:[]),
+    ...(missingPooled.length?[["ser","Pooled hours missing",`The Unallocated rows carry no pooled worked hours for ${missingPooled.join(", ")}.`]]:[]),
+    ["ser","Worked hours include paid time off","The Call Hours vs. Worked Hours sheet counts holiday and float hours as worked, which understates utilization. This dashboard uses regular plus overtime hours."],
+    ...(untyped||tinyStudies.length||dupStudies.length?[["ser","Time-study gaps",[untyped?`${nf0.format(untyped)} minutes of entries have no activity type.`:"",tinyStudies.length?`${tinyStudies.join(", ")} ha${tinyStudies.length===1?"s":"ve"} fewer than 5 lines.`:"",dupStudies.length?`More than one file for ${dupStudies.join(", ")}.`:""].filter(Boolean).join(" ")]]:[]),
+    ...(noDate?[["ser","Projects without completion dates",`${noDate} of ${d.projects.length} projects in the customer summary have no completion date.`]]:[]),
+    ...(TK.length?[["ser",`Blank fields in ${TKM} tickets`,`Scanner model blank on ${blanks("scan")}, operating system on ${blanks("os")}, software on ${blanks("sw")} of ${TK.length} tickets.`]]:[]),
+    ...(META.warnings||[]).map(w=>["ser","Refresh note",w])];
+  const box=el("div",{class:"dq"}); items.forEach(([lv,h,p])=>box.append(el("div",{},el("div",{},pill(lv,{crit:"High",warn:"Medium",ser:"Low"}[lv])),el("div",{},el("h3",{text:h}),el("p",{text:p})))));
+  sec.append(el("div",{class:"row"},panel("c12","Data quality checks",`${items.length} issues found. Checks are recomputed on every refresh. Fixing the high and medium items will make the workbook's own summaries agree with this dashboard.`,box)));
+};
+route();
+</script>
