@@ -1,0 +1,6 @@
+{
+ "versionCode": 30,
+ "versionName": "1.29",
+ "apk": "daily-reports-player.apk",
+ "notes": "New in 1.29: live refresh. While the app is open it re-checks the report list every minute, so a report published during the morning appears in place, like the web Daily page. The refresh is safe during playback: an unchanged queue is left alone, and a changed one re-maps around what is playing without losing your place."
+}
